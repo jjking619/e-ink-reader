@@ -16,7 +16,7 @@
 #include <lgpio.h>
 #include "DEV_Config.h"
 
-#define BOOK_PATH "/tools/books"
+#define BOOK_PATH "/home/pi/ebook-reader/src/tools/books"
 #define MAX_BOOK_SIZE (2 * 1024 * 1024) // 2MB
 #define MAX_BOOKS 20
 #define MAX_HISTORY 500 // 最多记录500页历史
@@ -25,6 +25,7 @@ static char current_file[256] = {0};
 static UBYTE *g_frame_buffer = NULL;
 static int key1_fd = -1; // event3: next page / long press: next book
 static int key2_fd = -1; // event1: prev page / long press: prev book
+static int eye_key_fd = -1; // 新增: eye_page_turner 虚拟设备
 static int first_display_done = 0;
 
 // 多书支持
@@ -301,6 +302,96 @@ void handle_keys(void) {
             break;
         }
     }
+
+    // 眼控设备事件处理 - 只处理来自虚拟设备的事件
+    if (eye_key_fd >= 0) {
+        while (read(eye_key_fd, &ev, sizeof(ev)) == sizeof(ev)) {
+            if (ev.type == EV_KEY && ev.value == 1) {
+                // 打印键值，用于调试
+                printf("[EYE] Key pressed: %d (%s)\n", ev.code, 
+                       ev.code == KEY_PAGEUP ? "KEY_PAGEUP" : 
+                       ev.code == KEY_PAGEDOWN ? "KEY_PAGEDOWN" : "OTHER");
+
+                struct timeval press_time, release_time;
+                gettimeofday(&press_time, NULL);
+                while (1) {
+                    if (read(eye_key_fd, &ev, sizeof(ev)) == sizeof(ev) && ev.type == EV_KEY && ev.value == 0) {
+                        gettimeofday(&release_time, NULL);
+                        break;
+                    }
+                    usleep(10000);
+                }
+                long press_ms = (release_time.tv_sec - press_time.tv_sec) * 1000 +
+                               (release_time.tv_usec - press_time.tv_usec) / 1000;
+
+                switch (ev.code) {
+                    case KEY_PAGEUP:  // 上一页按键
+                        if (press_ms > 1000) {
+                            // 长按：上一本书
+                            if (book_count > 1) {
+                                current_book_index = (current_book_index - 1 + book_count) % book_count;
+                                snprintf(current_file, sizeof(current_file), "%s", book_list[current_book_index]);
+                                if (load_txt_file(current_file) == 0) {
+                                    g_current_char_offset = 0;
+                                    size_t next_offset = display_txt_page_from_offset(0);
+                                    // 新书开始，清空历史，压入第一页
+                                    history_top = -1;
+                                    if (history_top < MAX_HISTORY - 1) {
+                                        history_stack[++history_top] = 0;
+                                    }
+                                    printf("Switched to book [%d]: %s\n", current_book_index, current_file);
+                                }
+                            }
+                        } else {
+                            // 短按：上一页
+                            if (history_top > -1) {
+                                g_current_char_offset = history_stack[history_top--];
+                                display_txt_page_from_offset(g_current_char_offset);
+                                printf("Back to page at offset %zu\n", g_current_char_offset);
+                            } else {
+                                printf("Already at first page.\n");
+                            }
+                        }
+                        break;
+                        
+                    case KEY_PAGEDOWN:  // 下一页按键
+                        if (press_ms > 1000) {
+                            // 长按：下一本书
+                            if (book_count > 1) {
+                                current_book_index = (current_book_index + 1) % book_count;
+                                snprintf(current_file, sizeof(current_file), "%s", book_list[current_book_index]);
+                                if (load_txt_file(current_file) == 0) {
+                                    g_current_char_offset = 0;
+                                    size_t next_offset = display_txt_page_from_offset(0);
+                                    history_top = -1;
+                                    if (history_top < MAX_HISTORY - 1) {
+                                        history_stack[++history_top] = 0;
+                                    }
+                                    printf("Switched to book [%d]: %s\n", current_book_index, current_file);
+                                }
+                            }
+                        } else {
+                            // 短按：下一页
+                            if (g_current_char_offset < g_text_size) {
+                                if (history_top < MAX_HISTORY - 1) {
+                                    history_stack[++history_top] = g_current_char_offset;
+                                }
+                                size_t next_offset = display_txt_page_from_offset(g_current_char_offset);
+                                g_current_char_offset = next_offset;
+                                printf("Next page from offset %zu\n", g_current_char_offset);
+                            } else {
+                                printf("End of book.\n");
+                            }
+                        }
+                        break;
+                        
+                    default:
+                        printf("[EYE] Unknown key code: %d\n", ev.code);
+                        break;
+                }
+            }
+        }
+    }
 }
 
 // 主函数
@@ -326,8 +417,17 @@ void EPD_7in5_V2_reader_txt(void) {
     DEV_GPIO_Init();
 #endif
 
+    // 打开物理按键设备
     key1_fd = open("/dev/input/event3", O_RDONLY | O_NONBLOCK);
     key2_fd = open("/dev/input/event1", O_RDONLY | O_NONBLOCK);
+
+    // 打开虚拟眼控设备
+    eye_key_fd = open("/dev/input/event9", O_RDONLY | O_NONBLOCK); // 注意：event9 是从 /proc/bus/input/devices 查到的
+    if (eye_key_fd < 0) {
+        printf("Warning: Failed to open eye control device\n");
+        // 继续运行，即使没有眼控设备也能用物理按键
+    }
+
     if (key1_fd < 0 || key2_fd < 0) {
         printf("Key devices not found\n");
         goto cleanup;
@@ -381,7 +481,7 @@ void EPD_7in5_V2_reader_txt(void) {
 
     printf("Reader started. Books: %d\n", book_count);
     while (1) {
-        handle_keys();
+        handle_keys(); // 处理物理按键和虚拟眼控按键
         usleep(50000);
     }
 
@@ -390,5 +490,6 @@ cleanup:
     free(g_frame_buffer);
     if (key1_fd >= 0) close(key1_fd);
     if (key2_fd >= 0) close(key2_fd);
+    if (eye_key_fd >= 0) close(eye_key_fd);
     EPD_7IN5_V2_Sleep();
 }
