@@ -111,6 +111,7 @@ print("[INFO] Eye control started")
 last_action_time = 0
 gaze_start_time = 0
 gaze_direction = None
+reset_required = False  # 是否需要复位到中心区域
 
 def get_landmark_coords(landmarks, landmark_idx, frame_width, frame_height):
     """获取特定关键点的坐标"""
@@ -150,7 +151,7 @@ while True:
             reference_nose_x = nose_x
             reference_nose_y = nose_y
             reference_update_counter = 0
-            print(f"[INFO] Reference position updated: nose_x={nose_x:.2f}, nose_y={nose_y:.2f}")
+            # print(f"[INFO] Reference position updated: nose_x={nose_x:.2f}, nose_y={nose_y:.2f}")
         
         reference_update_counter += 1
 
@@ -171,15 +172,30 @@ while True:
             nose_offset_x = nose_x - reference_nose_x
             nose_offset_y = nose_y - reference_nose_y
             
-            # 如果偏移超过阈值，则认为是头部移动
-            if nose_offset_x > GAZE_THRESHOLD_X * FRAME_WIDTH:
-                direction = "RIGHT"  # 头向右移，画面向左翻
-            elif nose_offset_x < -GAZE_THRESHOLD_X * FRAME_WIDTH:
-                direction = "LEFT"   # 头向左移，画面向右翻
-            elif nose_offset_y > GAZE_THRESHOLD_Y * FRAME_HEIGHT:
-                direction = "DOWN"   # 头向下移，切换到下一本书
-            elif nose_offset_y < -GAZE_THRESHOLD_Y * FRAME_HEIGHT:
-                direction = "UP"     # 头向上移，切换到上一本书
+            # 检查是否在中心区域（复位区域）
+            in_center_x = abs(nose_offset_x) < GAZE_THRESHOLD_X * FRAME_WIDTH / 2
+            in_center_y = abs(nose_offset_y) < GAZE_THRESHOLD_Y * FRAME_HEIGHT / 2
+            in_center_area = in_center_x and in_center_y
+            
+            # 如果需要复位，只有回到中心区域才能继续检测其他方向
+            if reset_required:
+                if in_center_area:
+                    reset_required = False
+                    print("[INFO] Reset to center area, ready for next action")
+                else:
+                    # 仍在复位过程中，跳过方向检测
+                    cv2.putText(frame, "Resetting...", (10, 120), 
+                               cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 255, 0), 2)
+            else:
+                # 如果不需要复位，检测各个方向
+                if nose_offset_x > GAZE_THRESHOLD_X * FRAME_WIDTH:
+                    direction = "RIGHT"  # 头向右移，画面向左翻
+                elif nose_offset_x < -GAZE_THRESHOLD_X * FRAME_WIDTH:
+                    direction = "LEFT"   # 头向左移，画面向右翻
+                elif nose_offset_y > GAZE_THRESHOLD_Y * FRAME_HEIGHT:
+                    direction = "DOWN"   # 头向下移，切换到下一本书
+                elif nose_offset_y < -GAZE_THRESHOLD_Y * FRAME_HEIGHT:
+                    direction = "UP"     # 头向上移，切换到上一本书
 
         # 注视逻辑
         if direction:
@@ -189,7 +205,7 @@ while True:
                 # 在画面上显示注视方向提示
                 cv2.putText(frame, f"Head moving {direction}", (10, 30), 
                            cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 0, 255), 2)
-                print(f"[DEBUG] Started tracking direction: {direction}")
+                # print(f"[DEBUG] Started tracking direction: {direction}")
             else:
                 elapsed_time = now - gaze_start_time
                 # 显示注视计时
@@ -211,10 +227,12 @@ while True:
                             print("[ACTION] PREV BOOK")
                             send_key(ecodes.KEY_PREVIOUS)
 
+                        # 设置复位需求
+                        reset_required = True
                         last_action_time = now
                         gaze_start_time = 0
                         gaze_direction = None
-                        print(f"[DEBUG] Action performed: {direction}")
+                        print(f"[DEBUG] Action performed: {direction}, waiting for reset")
                     else:
                         remaining_time = COOLDOWN_TIME - (now - last_action_time)
                         cv2.putText(frame, f"Cooldown: {remaining_time:.1f}s", (10, 90), 
@@ -224,27 +242,39 @@ while True:
             if reference_nose_x is not None and reference_nose_y is not None:
                 nose_offset_x = nose_x - reference_nose_x
                 nose_offset_y = nose_y - reference_nose_y
-                if abs(nose_offset_x) < GAZE_THRESHOLD_X * FRAME_WIDTH / 2 and abs(nose_offset_y) < GAZE_THRESHOLD_Y * FRAME_HEIGHT / 2:
-                    side_indicator = "CENTER"
-                elif abs(nose_offset_x) > abs(nose_offset_y):  # 水平移动更明显
-                    if nose_offset_x > 0:
-                        side_indicator = "RIGHT (turning)"
-                    else:
-                        side_indicator = "LEFT (turning)"
-                else:  # 垂直移动更明显
-                    if nose_offset_y > 0:
-                        side_indicator = "DOWN (next book)"
-                    else:
-                        side_indicator = "UP (prev book)"
                 
-                cv2.putText(frame, f"Head: {side_indicator}", (10, 30), 
-                           cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2)
-                
-                # 显示当前偏移量
-                cv2.putText(frame, f"Offset X: {nose_offset_x:.1f}px", (10, 60), 
-                           cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 255), 2)
-                cv2.putText(frame, f"Offset Y: {nose_offset_y:.1f}px", (10, 80), 
-                           cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 255), 2)
+                if reset_required:
+                    # 正在等待复位
+                    cv2.putText(frame, "RESET REQUIRED", (10, 30), 
+                               cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 0, 255), 2)
+                    
+                    # 显示当前偏移量
+                    cv2.putText(frame, f"Offset X: {nose_offset_x:.1f}px", (10, 60), 
+                               cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 255), 2)
+                    cv2.putText(frame, f"Offset Y: {nose_offset_y:.1f}px", (10, 80), 
+                               cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 255), 2)
+                else:
+                    if abs(nose_offset_x) < GAZE_THRESHOLD_X * FRAME_WIDTH / 2 and abs(nose_offset_y) < GAZE_THRESHOLD_Y * FRAME_HEIGHT / 2:
+                        side_indicator = "CENTER"
+                    elif abs(nose_offset_x) > abs(nose_offset_y):  # 水平移动更明显
+                        if nose_offset_x > 0:
+                            side_indicator = "RIGHT (turning)"
+                        else:
+                            side_indicator = "LEFT (turning)"
+                    else:  # 垂直移动更明显
+                        if nose_offset_y > 0:
+                            side_indicator = "DOWN (next book)"
+                        else:
+                            side_indicator = "UP (prev book)"
+                    
+                    cv2.putText(frame, f"Head: {side_indicator}", (10, 30), 
+                               cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2)
+                    
+                    # 显示当前偏移量
+                    cv2.putText(frame, f"Offset X: {nose_offset_x:.1f}px", (10, 60), 
+                               cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 255), 2)
+                    cv2.putText(frame, f"Offset Y: {nose_offset_y:.1f}px", (10, 80), 
+                               cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 255), 2)
             
             gaze_start_time = 0
             gaze_direction = None
