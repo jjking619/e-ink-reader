@@ -206,6 +206,42 @@ size_t display_txt_page_from_offset(size_t start_offset) {
     return i; // 返回下一个起始偏移
 }
 
+// 切换到下一本书
+void next_book() {
+    if (book_count > 1) {
+        current_book_index = (current_book_index + 1) % book_count;
+        snprintf(current_file, sizeof(current_file), "%s", book_list[current_book_index]);
+        if (load_txt_file(current_file) == 0) {
+            g_current_char_offset = 0;
+            size_t next_offset = display_txt_page_from_offset(0);
+            // 新书开始，清空历史，压入第一页
+            history_top = -1;
+            if (history_top < MAX_HISTORY - 1) {
+                history_stack[++history_top] = 0;
+            }
+            printf("Switched to book [%d]: %s\n", current_book_index, current_file);
+        }
+    }
+}
+
+// 切换到上一本书
+void prev_book() {
+    if (book_count > 1) {
+        current_book_index = (current_book_index - 1 + book_count) % book_count;
+        snprintf(current_file, sizeof(current_file), "%s", book_list[current_book_index]);
+        if (load_txt_file(current_file) == 0) {
+            g_current_char_offset = 0;
+            size_t next_offset = display_txt_page_from_offset(0);
+            // 新书开始，清空历史，压入第一页
+            history_top = -1;
+            if (history_top < MAX_HISTORY - 1) {
+                history_stack[++history_top] = 0;
+            }
+            printf("Switched to book [%d]: %s\n", current_book_index, current_file);
+        }
+    }
+}
+
 // 按键处理
 void handle_keys(void) {
     struct input_event ev;
@@ -227,20 +263,7 @@ void handle_keys(void) {
 
             if (press_ms > 1000) {
                 // 长按：上一本书
-                if (book_count > 1) {
-                    current_book_index = (current_book_index - 1 + book_count) % book_count;
-                    snprintf(current_file, sizeof(current_file), "%s", book_list[current_book_index]);
-                    if (load_txt_file(current_file) == 0) {
-                        g_current_char_offset = 0;
-                        size_t next_offset = display_txt_page_from_offset(0);
-                        // 新书开始，清空历史，压入第一页
-                        history_top = -1;
-                        if (history_top < MAX_HISTORY - 1) {
-                            history_stack[++history_top] = 0;
-                        }
-                        printf("Switched to book [%d]: %s\n", current_book_index, current_file);
-                    }
-                }
+                prev_book();
             } else {
                 // 短按：上一页
                 if (history_top > -1) {
@@ -272,19 +295,7 @@ void handle_keys(void) {
 
             if (press_ms > 1000) {
                 // 长按：下一本书
-                if (book_count > 1) {
-                    current_book_index = (current_book_index + 1) % book_count;
-                    snprintf(current_file, sizeof(current_file), "%s", book_list[current_book_index]);
-                    if (load_txt_file(current_file) == 0) {
-                        g_current_char_offset = 0;
-                        size_t next_offset = display_txt_page_from_offset(0);
-                        history_top = -1;
-                        if (history_top < MAX_HISTORY - 1) {
-                            history_stack[++history_top] = 0;
-                        }
-                        printf("Switched to book [%d]: %s\n", current_book_index, current_file);
-                    }
-                }
+                next_book();
             } else {
                 // 短按：下一页
                 if (g_current_char_offset < g_text_size) {
@@ -310,7 +321,9 @@ void handle_keys(void) {
                 // 打印键值，用于调试
                 printf("[EYE] Key pressed: %d (%s)\n", ev.code, 
                        ev.code == KEY_PAGEUP ? "KEY_PAGEUP" : 
-                       ev.code == KEY_PAGEDOWN ? "KEY_PAGEDOWN" : "OTHER");
+                       ev.code == KEY_PAGEDOWN ? "KEY_PAGEDOWN" :
+                       ev.code == KEY_NEXT ? "KEY_NEXT" :
+                       ev.code == KEY_PREVIOUS ? "KEY_PREVIOUS" : "OTHER");
 
                 struct timeval press_time, release_time;
                 gettimeofday(&press_time, NULL);
@@ -328,20 +341,7 @@ void handle_keys(void) {
                     case KEY_PAGEUP:  // 上一页按键
                         if (press_ms > 1000) {
                             // 长按：上一本书
-                            if (book_count > 1) {
-                                current_book_index = (current_book_index - 1 + book_count) % book_count;
-                                snprintf(current_file, sizeof(current_file), "%s", book_list[current_book_index]);
-                                if (load_txt_file(current_file) == 0) {
-                                    g_current_char_offset = 0;
-                                    size_t next_offset = display_txt_page_from_offset(0);
-                                    // 新书开始，清空历史，压入第一页
-                                    history_top = -1;
-                                    if (history_top < MAX_HISTORY - 1) {
-                                        history_stack[++history_top] = 0;
-                                    }
-                                    printf("Switched to book [%d]: %s\n", current_book_index, current_file);
-                                }
-                            }
+                            prev_book();
                         } else {
                             // 短按：上一页
                             if (history_top > -1) {
@@ -357,19 +357,7 @@ void handle_keys(void) {
                     case KEY_PAGEDOWN:  // 下一页按键
                         if (press_ms > 1000) {
                             // 长按：下一本书
-                            if (book_count > 1) {
-                                current_book_index = (current_book_index + 1) % book_count;
-                                snprintf(current_file, sizeof(current_file), "%s", book_list[current_book_index]);
-                                if (load_txt_file(current_file) == 0) {
-                                    g_current_char_offset = 0;
-                                    size_t next_offset = display_txt_page_from_offset(0);
-                                    history_top = -1;
-                                    if (history_top < MAX_HISTORY - 1) {
-                                        history_stack[++history_top] = 0;
-                                    }
-                                    printf("Switched to book [%d]: %s\n", current_book_index, current_file);
-                                }
-                            }
+                            next_book();
                         } else {
                             // 短按：下一页
                             if (g_current_char_offset < g_text_size) {
@@ -383,6 +371,14 @@ void handle_keys(void) {
                                 printf("End of book.\n");
                             }
                         }
+                        break;
+                        
+                    case KEY_NEXT:  // 下一本书按键 (对应头部向下移动)
+                        next_book();
+                        break;
+                        
+                    case KEY_PREVIOUS:  // 上一本书按键 (对应头部向上移动)
+                        prev_book();
                         break;
                         
                     default:
