@@ -17,17 +17,17 @@
 #include "DEV_Config.h"
 
 #define BOOK_PATH "/home/pi/ebook-reader/src/tools/books"
-#define MAX_BOOK_SIZE (2 * 1024 * 1024) // 2MB
+#define MAX_BOOK_SIZE (4* 1024 * 1024) // 4MB
 #define MAX_BOOKS 20
-#define MAX_HISTORY 500 // 最多记录500页历史a
+#define MAX_HISTORY 500 // 最多记录500页历史
 
 // 局部刷新区域定义
 #define HEADER_HEIGHT   30
 #define FOOTER_HEIGHT   40
+#define LINE 5
 
 #define TEXT_TOP        HEADER_HEIGHT
 #define TEXT_BOTTOM     (EPD_7IN5_V2_HEIGHT - FOOTER_HEIGHT)
-
 
 static char current_file[256] = {0};
 static UBYTE *g_frame_buffer = NULL;
@@ -52,6 +52,9 @@ static size_t g_current_char_offset = 0;
 // 历史栈：记录每一页的起始偏移（用于精确回退）
 static size_t history_stack[MAX_HISTORY];
 static int history_top = -1;
+
+// 标记是否需要重绘书名
+static int title_drawn = 0;
 
 const char* get_ext(const char* filename) {
     const char* dot = strrchr(filename, '.');
@@ -116,7 +119,6 @@ void show_error(const char* msg) {
 
 // 核心：从指定偏移绘制一页，并返回下一页起始偏移
 size_t display_txt_page_from_offset(size_t start_offset) {
-    static int title_drawn = 0;
     if (!g_full_text || start_offset >= g_text_size) {
         Paint_SelectImage(g_frame_buffer);
         Paint_Clear(WHITE);
@@ -125,43 +127,51 @@ size_t display_txt_page_from_offset(size_t start_offset) {
     }
 
     Paint_SelectImage(g_frame_buffer);
-    // 不清空整个屏幕，只清空内容区域
-    if(first_display_done) {
-        // 局部刷新：只清空内容区域
-        Paint_ClearWindows(
-    0,
-    TEXT_TOP,
-    EPD_7IN5_V2_WIDTH,
-    TEXT_BOTTOM,
-    WHITE
-);
+    
+    // 每次局部刷新只清空内容区域，保持性能
+    if (first_display_done) {
+        // 局部刷新：只清空文本和页码内容区域，保留书名
+        Paint_ClearWindows(0, TEXT_TOP+LINE, EPD_7IN5_V2_WIDTH, TEXT_BOTTOM, WHITE);
     } else {
         // 首次显示需要清空整个屏幕
         Paint_Clear(WHITE);
     }
-
-    // 显示当前书籍名称
-    char book_title[256];
-    snprintf(book_title, sizeof(book_title), "Book: %s", current_file + strlen(BOOK_PATH) + 1);
-    if (!title_drawn) {
-    Paint_DrawString_EN(10, 10, book_title, &Font16, BLACK, WHITE);
-    title_drawn = 1;
-}
-
-    Paint_DrawString_EN(10, 10, book_title, &Font16, BLACK, WHITE);
     
-    // 显示页码信息
-    char page_info[100];
-    snprintf(page_info, sizeof(page_info), "Page: %d/%d", history_top+1, (int)(g_text_size/3000)+1); // 粗略估算页数
-    Paint_DrawString_EN(EPD_7IN5_V2_WIDTH - 150, EPD_7IN5_V2_HEIGHT - 20, page_info, &Font16, BLACK, WHITE);
+    // 显示当前书籍名称（Header部分）- 只在首次显示时绘制
+    if (!title_drawn) {
+        // 首次显示时绘制书名
+        char book_title[256];
+        const char* filename = strrchr(current_file, '/');
+        if (filename == NULL) filename = current_file;
+        else filename++; // 跳过 '/'
+        
+        snprintf(book_title, sizeof(book_title), "Book: %s", filename);
+        Paint_DrawString_EN(10, 10, book_title, &Font16, BLACK, WHITE);
+        
+        // 绘制分隔线
+        Paint_DrawLine(10, HEADER_HEIGHT+2, EPD_7IN5_V2_WIDTH - 10, HEADER_HEIGHT+2, BLACK, DOT_PIXEL_1X1, LINE_STYLE_SOLID);
+        title_drawn = 1;
+    }
 
+    // 显示页码信息（Footer部分）- 每次翻页都更新
+    char page_info[100];
+    // 简单页码计算
+    int approx_total_pages = (g_text_size / 2000) + 1; // 每页约2000字节
+    int current_page = (start_offset / 2000) + 1;
+    if (current_page > approx_total_pages) current_page = approx_total_pages;
+    
+    snprintf(page_info, sizeof(page_info), "Page: %d/%d", current_page, approx_total_pages);
+    // Paint_DrawString_EN(EPD_7IN5_V2_WIDTH-150, EPD_7IN5_V2_HEIGHT-FOOTER_HEIGHT, page_info, &Font16, BLACK, WHITE);
+    
     const int left_margin = 10;
     const int right_margin = 10;
     const int max_x = EPD_7IN5_V2_WIDTH - right_margin;
-    const int line_height_en = Font16.Height* 0.8;   // 英文行高
-    const int line_height_cn = Font12CN.Height; // 中文行高
-    int y = TEXT_TOP; // 从内容区域开始绘制
-    const int max_y = TEXT_BOTTOM - 20; // 留出底部边距
+    const int line_height_en = Font16.Height * 0.8;   // 英文行高
+    const int line_height_cn = Font12CN.Height;       // 中文行高
+    
+    // 重要：文本内容从TEXT_TOP开始，避免覆盖书名
+    int y = TEXT_TOP+LINE;
+    const int max_y = TEXT_BOTTOM; // 使用定义的TEXT_BOTTOM作为最大Y坐标
 
     size_t i = start_offset;
     while (i < g_text_size && y < max_y) {
@@ -169,6 +179,8 @@ size_t display_txt_page_from_offset(size_t start_offset) {
         while (i < g_text_size && (g_full_text[i] == '\r' || g_full_text[i] == '\n')) {
             i++;
             y += line_height_cn; // 段落间距统一用中文高度
+            
+            // 检查是否超出文本显示区域
             if (y >= max_y) break;
         }
         if (i >= g_text_size || y >= max_y) break;
@@ -216,6 +228,11 @@ size_t display_txt_page_from_offset(size_t start_offset) {
             temp_line[temp_len] = '\0';
             int current_line_height = has_chinese ? line_height_cn : line_height_en;
 
+            // 检查是否还能放下一行，防止文本超出显示区域
+            if (y + current_line_height > max_y) {
+                break;
+            }
+            
             if (has_chinese) {
                 Paint_DrawString_CN(left_margin, y, temp_line, &Font12CN, BLACK, WHITE);
             } else {
@@ -229,29 +246,23 @@ size_t display_txt_page_from_offset(size_t start_offset) {
 
     // 显示页面
     if (!first_display_done) {
-    printf("First display: full clear\n");
-
-    // ① 全刷模式初始化
-    EPD_7IN5_V2_Init();
-    EPD_7IN5_V2_Clear();
-    DEV_Delay_ms(1500);
-    EPD_7IN5_V2_Display(g_frame_buffer);
-
-    // ② 关键：切换到局部刷新 LUT
-    DEV_Delay_ms(500);
-    EPD_7IN5_V2_Init_Part();
-
-    first_display_done = 1;
-}
-else {
-        // 使用局部刷新模式更新内容区域
+        printf("First display: full clear\n");
+        EPD_7IN5_V2_Init();
+        EPD_7IN5_V2_Clear();
+        DEV_Delay_ms(1500);
+        EPD_7IN5_V2_Display(g_frame_buffer);
+        DEV_Delay_ms(500);
+        EPD_7IN5_V2_Init_Part();
+        first_display_done = 1;
+    } else {
+        // 局部刷新：只刷新内容和页码区域（合并区域）
         EPD_7IN5_V2_Display_Part(
-    g_frame_buffer,
-    0,
-    TEXT_TOP,
-    EPD_7IN5_V2_WIDTH,
-    TEXT_BOTTOM
-);
+            g_frame_buffer,
+            0,                    // 从左边缘开始
+            TEXT_TOP+LINE,        // 从文本顶部开始刷新
+            EPD_7IN5_V2_WIDTH,    // 刷新到右边缘
+            TEXT_BOTTOM           // 刷新到文本底部（包含页码区域）
+        );
     }
 
     return i; // 返回下一个起始偏移
@@ -270,6 +281,8 @@ void next_book() {
             if (history_top < MAX_HISTORY - 1) {
                 history_stack[++history_top] = 0;
             }
+            // 重置书名标记，以便在切换到新书时重新绘制书名
+            title_drawn = 0;
             printf("Switched to book [%d]: %s\n", current_book_index, current_file);
         }
     }
@@ -288,6 +301,8 @@ void prev_book() {
             if (history_top < MAX_HISTORY - 1) {
                 history_stack[++history_top] = 0;
             }
+            // 重置书名标记，以便在切换到新书时重新绘制书名
+            title_drawn = 0;
             printf("Switched to book [%d]: %s\n", current_book_index, current_file);
         }
     }
