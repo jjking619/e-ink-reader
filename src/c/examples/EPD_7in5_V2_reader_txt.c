@@ -19,10 +19,19 @@
 #define BOOK_PATH "/home/pi/ebook-reader/src/tools/books"
 #define MAX_BOOK_SIZE (2 * 1024 * 1024) // 2MB
 #define MAX_BOOKS 20
-#define MAX_HISTORY 500 // 最多记录500页历史
+#define MAX_HISTORY 500 // 最多记录500页历史a
+
+// 局部刷新区域定义
+#define HEADER_HEIGHT   30
+#define FOOTER_HEIGHT   40
+
+#define TEXT_TOP        HEADER_HEIGHT
+#define TEXT_BOTTOM     (EPD_7IN5_V2_HEIGHT - FOOTER_HEIGHT)
+
 
 static char current_file[256] = {0};
 static UBYTE *g_frame_buffer = NULL;
+static UBYTE *g_prev_frame_buffer = NULL; // 用于比较前后两帧差异，实现真正意义上的局部刷新
 static int key1_fd = -1; // event3: next page / long press: next book
 static int key2_fd = -1; // event1: prev page / long press: prev book
 static int eye_key_fd = -1; // 新增: eye_page_turner 虚拟设备
@@ -107,6 +116,7 @@ void show_error(const char* msg) {
 
 // 核心：从指定偏移绘制一页，并返回下一页起始偏移
 size_t display_txt_page_from_offset(size_t start_offset) {
+    static int title_drawn = 0;
     if (!g_full_text || start_offset >= g_text_size) {
         Paint_SelectImage(g_frame_buffer);
         Paint_Clear(WHITE);
@@ -115,17 +125,43 @@ size_t display_txt_page_from_offset(size_t start_offset) {
     }
 
     Paint_SelectImage(g_frame_buffer);
-    Paint_Clear(WHITE);
-    UDOUBLE Imagesize = ((EPD_7IN5_V2_WIDTH % 8 == 0) ? (EPD_7IN5_V2_WIDTH / 8) : (EPD_7IN5_V2_WIDTH / 8 + 1)) * EPD_7IN5_V2_HEIGHT;
-    memset(g_frame_buffer, 0xFF, Imagesize);
+    // 不清空整个屏幕，只清空内容区域
+    if(first_display_done) {
+        // 局部刷新：只清空内容区域
+        Paint_ClearWindows(
+    0,
+    TEXT_TOP,
+    EPD_7IN5_V2_WIDTH,
+    TEXT_BOTTOM,
+    WHITE
+);
+    } else {
+        // 首次显示需要清空整个屏幕
+        Paint_Clear(WHITE);
+    }
+
+    // 显示当前书籍名称
+    char book_title[256];
+    snprintf(book_title, sizeof(book_title), "Book: %s", current_file + strlen(BOOK_PATH) + 1);
+    if (!title_drawn) {
+    Paint_DrawString_EN(10, 10, book_title, &Font16, BLACK, WHITE);
+    title_drawn = 1;
+}
+
+    Paint_DrawString_EN(10, 10, book_title, &Font16, BLACK, WHITE);
+    
+    // 显示页码信息
+    char page_info[100];
+    snprintf(page_info, sizeof(page_info), "Page: %d/%d", history_top+1, (int)(g_text_size/3000)+1); // 粗略估算页数
+    Paint_DrawString_EN(EPD_7IN5_V2_WIDTH - 150, EPD_7IN5_V2_HEIGHT - 20, page_info, &Font16, BLACK, WHITE);
 
     const int left_margin = 10;
     const int right_margin = 10;
     const int max_x = EPD_7IN5_V2_WIDTH - right_margin;
     const int line_height_en = Font16.Height* 0.8;   // 英文行高
     const int line_height_cn = Font12CN.Height; // 中文行高
-    int y = 10;
-    const int max_y = EPD_7IN5_V2_HEIGHT - 10;
+    int y = TEXT_TOP; // 从内容区域开始绘制
+    const int max_y = TEXT_BOTTOM - 20; // 留出底部边距
 
     size_t i = start_offset;
     while (i < g_text_size && y < max_y) {
@@ -183,7 +219,7 @@ size_t display_txt_page_from_offset(size_t start_offset) {
             if (has_chinese) {
                 Paint_DrawString_CN(left_margin, y, temp_line, &Font12CN, BLACK, WHITE);
             } else {
-                Paint_DrawString_EN(left_margin, y, temp_line, &Font16, WHITE, BLACK);
+                Paint_DrawString_EN(left_margin, y, temp_line, &Font16, BLACK, WHITE);
             }
             y += current_line_height;
         }
@@ -193,14 +229,29 @@ size_t display_txt_page_from_offset(size_t start_offset) {
 
     // 显示页面
     if (!first_display_done) {
-        printf("First display: full clear\n");
-        EPD_7IN5_V2_Init();
-        EPD_7IN5_V2_Clear();
-        DEV_Delay_ms(2000);
-        EPD_7IN5_V2_Display(g_frame_buffer);
-        first_display_done = 1;
-    } else {
-        EPD_7IN5_V2_Display(g_frame_buffer);
+    printf("First display: full clear\n");
+
+    // ① 全刷模式初始化
+    EPD_7IN5_V2_Init();
+    EPD_7IN5_V2_Clear();
+    DEV_Delay_ms(1500);
+    EPD_7IN5_V2_Display(g_frame_buffer);
+
+    // ② 关键：切换到局部刷新 LUT
+    DEV_Delay_ms(500);
+    EPD_7IN5_V2_Init_Part();
+
+    first_display_done = 1;
+}
+else {
+        // 使用局部刷新模式更新内容区域
+        EPD_7IN5_V2_Display_Part(
+    g_frame_buffer,
+    0,
+    TEXT_TOP,
+    EPD_7IN5_V2_WIDTH,
+    TEXT_BOTTOM
+);
     }
 
     return i; // 返回下一个起始偏移
@@ -465,6 +516,13 @@ void EPD_7in5_V2_reader_txt(void) {
         printf("Malloc failed\n");
         goto cleanup;
     }
+    // 分配前一帧缓存，用于对比和局部刷新
+    g_prev_frame_buffer = (UBYTE *)malloc(Imagesize);
+    if (!g_prev_frame_buffer) {
+        printf("Malloc for previous frame failed\n");
+        free(g_frame_buffer);
+        goto cleanup;
+    }
     Paint_NewImage(g_frame_buffer, EPD_7IN5_V2_WIDTH, EPD_7IN5_V2_HEIGHT, ROTATE_180, WHITE);
 
     // 显示第一页
@@ -484,6 +542,7 @@ void EPD_7in5_V2_reader_txt(void) {
 cleanup:
     free(g_full_text);
     free(g_frame_buffer);
+    free(g_prev_frame_buffer);
     if (key1_fd >= 0) close(key1_fd);
     if (key2_fd >= 0) close(key2_fd);
     if (eye_key_fd >= 0) close(eye_key_fd);
