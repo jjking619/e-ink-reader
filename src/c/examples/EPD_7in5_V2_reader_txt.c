@@ -226,7 +226,9 @@ void calculate_page_info() {
                 // 遇到段落结束标记，换行
                 if (c == '\n') {
                     offset++;  // 跳过段落结束标记
-                    break;
+                    // 段落后第一行需要缩进，所以将x设置为缩进距离
+                    x = left_margin + (Font16.Width * 30);  // 缩进30个字符的宽度
+                    continue;  // 继续下一次循环
                 }
 
                 int bytes = 1;
@@ -248,7 +250,7 @@ void calculate_page_info() {
             }
 
             page_has_content = 1; // 至少有一行内容
-            
+                
             int lh = has_cn ? lh_cn : lh_en;
             if (y + lh > text_bottom)
                 break;
@@ -494,7 +496,9 @@ size_t display_txt_page_from_offset(size_t start_offset)
             // 遇到段落结束标记，换行
             if (c == '\n') {
                 i++;  // 跳过段落结束标记
-                break;
+                // 段落后第一行需要缩进，所以将x设置为缩进距离
+                x = left_margin + (Font16.Width * 2);  // 缩进两个字符的宽度
+                continue;  // 继续下一次循环
             }
 
             int bytes = 1;
