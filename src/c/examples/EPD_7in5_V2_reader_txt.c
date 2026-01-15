@@ -70,7 +70,7 @@ static int title_drawn = 0;
 // 新增：用于准确计算当前页数
 static size_t *page_offsets = NULL;  // 存储每一页的起始偏移
 static int total_pages = 0;          // 总页数
-static int current_page_index = 1;   // 当前页索引（从1开始）
+static int current_page_index = 0;   // 当前页索引（从0开始）
 
 // 函数声明
 char* process_text_content(const char* raw_text, size_t raw_size);
@@ -479,6 +479,9 @@ size_t display_txt_page_from_offset(size_t start_offset)
     // 使用处理后的文本
     size_t i = start_offset;
 
+    // 记录进入循环前的起始位置
+    size_t initial_i = i;
+
     while (i < g_processed_text_size && y < text_bottom) {
         int x = left_margin;
         char line[512] = {0};
@@ -500,9 +503,16 @@ size_t display_txt_page_from_offset(size_t start_offset)
                 if ((unsigned char)g_processed_text[i+1] > 0x40) {
                     bytes = 2;
                 }
+            } else if (c > 0x80 && i + 2 < g_processed_text_size) {
+                // 检查是否是三字节UTF-8字符（中文字符）
+                if (((unsigned char)g_processed_text[i] & 0xE0) == 0xE0) {
+                    bytes = 3;
+                }
             }
 
-            int width = (bytes == 2) ? Font12CN.Width : Font16.Width;
+            int width = (bytes == 1) ? Font16.Width : 
+                       (bytes == 2) ? Font12CN.Width : 
+                       Font12CN.Width; // 三字节UTF-8字符也按中文字符宽度处理
 
             if (x + width > max_x)
                 break;  // 达到行宽限制，换行
@@ -510,7 +520,7 @@ size_t display_txt_page_from_offset(size_t start_offset)
             for (int k = 0; k < bytes && i + k < g_processed_text_size; k++)
                 line[len++] = g_processed_text[i + k];
 
-            if (bytes == 2) has_cn = 1;
+            if (bytes > 1) has_cn = 1;
             i += bytes;
             x += width;
         }
@@ -527,6 +537,21 @@ size_t display_txt_page_from_offset(size_t start_offset)
                 Paint_DrawString_EN(left_margin, y, line, &Font16, BLACK, WHITE);
 
             y += lh;
+        }
+        
+        // 如果在循环中没有进展（即i没有增加），则跳出以防止无限循环
+        if (i == initial_i && i < g_processed_text_size) {
+            // 跳过一个字符以防止无限循环
+            unsigned char c = (unsigned char)g_processed_text[i];
+            if (c > 0x80 && i + 1 < g_processed_text_size) {
+                if ((unsigned char)g_processed_text[i+1] > 0x40) {
+                    i += 2;  // 跳过双字节字符
+                } else {
+                    i += 1;  // 跳过单个字节
+                }
+            } else {
+                i += 1;  // 跳过单个字节
+            }
         }
     }
 
@@ -550,7 +575,7 @@ size_t display_txt_page_from_offset(size_t start_offset)
 
     Paint_DrawString_EN(
         EPD_7IN5_V2_WIDTH - 160,
-        FOOTER_Y_START +10,  // 页码下移10像素
+        FOOTER_Y_START + 10,  // 页码下移10像素
         page,
         &Font16,
         BLACK,
@@ -568,7 +593,7 @@ size_t display_txt_page_from_offset(size_t start_offset)
         EPD_7IN5_V2_HEIGHT - CONTENT_Y_START
     );
 
-    return i;
+    return i;  // 返回实际结束的偏移量
 }
 
 // 切换到下一本书
@@ -848,6 +873,7 @@ void EPD_7in5_V2_reader_txt(void) {
     // 显示第一页
     g_current_char_offset = 0;
     size_t next_offset = display_txt_page_from_offset(g_current_char_offset);
+    g_current_char_offset = next_offset;  // 更新g_current_char_offset为下一页的起始位置
     // 压入第一页历史（便于后续回退到开头）
     if (history_top < MAX_HISTORY - 1) {
         history_stack[++history_top] = 0;
