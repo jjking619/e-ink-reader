@@ -53,6 +53,9 @@ static int current_book_index = 0;
 // 全局文本
 static char* g_full_text = NULL;
 static size_t g_text_size = 0;
+// 新增：处理后的纯文本内容，去除多余换行
+static char* g_processed_text = NULL;
+static size_t g_processed_text_size = 0;
 
 // 当前页起始偏移（字节）
 static size_t g_current_char_offset = 0;
@@ -64,9 +67,245 @@ static int history_top = -1;
 // 标记是否需要重绘书名
 static int title_drawn = 0;
 
+// 新增：用于准确计算当前页数
+static size_t *page_offsets = NULL;  // 存储每一页的起始偏移
+static int total_pages = 0;          // 总页数
+static int current_page_index = 1;   // 当前页索引（从1开始）
+
+// 函数声明
+char* process_text_content(const char* raw_text, size_t raw_size);
+void calculate_page_info();
+int get_current_page_index(size_t offset);
+
 const char* get_ext(const char* filename) {
     const char* dot = strrchr(filename, '.');
     return (dot && dot != filename) ? dot + 1 : "";
+}
+
+// 处理文本内容：合并段落，去除多余换行
+char* process_text_content(const char* raw_text, size_t raw_size) {
+    if (!raw_text || raw_size == 0) return NULL;
+
+    // 创建临时缓冲区存储处理后的文本
+    char* processed = malloc(raw_size + 1);  // 初始化为原大小，可能会略大一些
+    if (!processed) return NULL;
+
+    size_t src_idx = 0, dst_idx = 0;
+    int in_paragraph = 0;  // 标记是否在段落中间
+
+    while (src_idx < raw_size) {
+        // 跳过连续的换行符和空白字符
+        while (src_idx < raw_size && (raw_text[src_idx] == '\n' || raw_text[src_idx] == '\r')) {
+            // 检查是否是段落分隔（连续两个换行符）
+            size_t temp_idx = src_idx;
+            int newline_count = 0;
+            while (temp_idx < raw_size && (raw_text[temp_idx] == '\n' || raw_text[temp_idx] == '\r')) {
+                if (raw_text[temp_idx] == '\n' || raw_text[temp_idx] == '\r') {
+                    newline_count++;
+                    // 跳过\r\n或\n\r序列
+                    if (temp_idx+1 < raw_size && 
+                        ((raw_text[temp_idx]=='\r' && raw_text[temp_idx+1]=='\n') ||
+                         (raw_text[temp_idx]=='\n' && raw_text[temp_idx+1]=='\r'))) {
+                        temp_idx += 2;
+                    } else {
+                        temp_idx++;
+                    }
+                }
+            }
+            
+            // 如果是段落分隔（至少两个换行），则添加一个换行表示段落结束
+            if (newline_count >= 2) {
+                if (in_paragraph) {
+                    processed[dst_idx++] = '\n';  // 段落结束标记
+                    in_paragraph = 0;
+                }
+            } else if (in_paragraph) {
+                // 行与行之间的换行替换为空格
+                processed[dst_idx++] = ' ';
+            }
+            
+            src_idx = temp_idx;
+        }
+
+        // 处理普通字符
+        if (src_idx < raw_size && raw_text[src_idx] != '\n' && raw_text[src_idx] != '\r') {
+            // 跳过开头的空白字符（如果不在段落中）
+            if (!in_paragraph) {
+                while (src_idx < raw_size && raw_text[src_idx] == ' ') src_idx++;
+                if (src_idx >= raw_size) break;
+            }
+
+            // 复制字符
+            unsigned char c = (unsigned char)raw_text[src_idx];
+            int bytes = 1;
+            // 检测中文字符（高位字节大于0x80）
+            if (c > 0x80 && src_idx + 1 < raw_size) {
+                // 检查下一个字节是否是有效的低位字节
+                if ((unsigned char)raw_text[src_idx+1] > 0x40) {
+                    bytes = 2;
+                }
+            }
+
+            // 复制字符（跳过段落内的多余空格）
+            if (c == ' ' && in_paragraph && dst_idx > 0 && processed[dst_idx-1] == ' ') {
+                // 跳过多余的空格
+            } else {
+                for (int i = 0; i < bytes && src_idx+i < raw_size; i++) {
+                    processed[dst_idx++] = raw_text[src_idx + i];
+                }
+                in_paragraph = 1;
+            }
+
+            src_idx += bytes;
+        }
+    }
+
+    processed[dst_idx] = '\0';
+    // 重新分配合适大小的内存
+    char* result = realloc(processed, dst_idx + 1);
+    if (!result) result = processed;  // 如果realloc失败，返回原来的指针
+    return result;
+}
+
+// 计算总页数并存储每页的起始偏移
+void calculate_page_info() {
+    if (!g_processed_text) return;
+    
+    // 释放之前的页偏移数组
+    if (page_offsets) {
+        free(page_offsets);
+        page_offsets = NULL;
+    }
+    
+    // 临时存储页偏移，使用较大缓冲区
+    size_t *temp_offsets = malloc(sizeof(size_t) * (g_processed_text_size / 1000 + 100));
+    if (!temp_offsets) {
+        printf("Error: Could not allocate memory for temporary page offsets\n");
+        return;
+    }
+    
+    int count = 0;
+    size_t offset = 0;
+    
+    // 循环计算每一页的起始偏移
+    while (offset < g_processed_text_size) {
+        if(count >= (g_processed_text_size / 1000 + 100)) {
+            // 如果数组容量不够，重新分配更大的空间
+            size_t *new_temp_offsets = realloc(temp_offsets, sizeof(size_t) * (count + 1000));
+            if(new_temp_offsets) {
+                temp_offsets = new_temp_offsets;
+            } else {
+                printf("Warning: Could not expand memory for page offsets, stop calculation at page %d\n", count);
+                break;
+            }
+        }
+        
+        temp_offsets[count++] = offset;
+        
+        // 使用相同的显示逻辑计算一页能容纳多少字符
+        const int left_margin = 10;
+        const int right_margin = 10;
+        const int max_x = EPD_7IN5_V2_WIDTH - right_margin;
+        
+        const int lh_en = Font16.Height;
+        const int lh_cn = Font12CN.Height;
+        
+        int y = CONTENT_Y_START+HEADER_HEIGHT +10 ;
+        const int text_bottom = FOOTER_Y_START - 10;
+        
+        // 计算一页的内容
+        int page_has_content = 0; // 标记这一页是否有内容
+        
+        while (offset < g_processed_text_size && y < text_bottom) {
+            int x = left_margin;
+            int has_cn = 0;
+
+            // 构建一行文本，直到达到最大宽度或遇到段落结束标记
+            while (offset < g_processed_text_size) {
+                unsigned char c = (unsigned char)g_processed_text[offset];
+                // 遇到段落结束标记，换行
+                if (c == '\n') {
+                    offset++;  // 跳过段落结束标记
+                    break;
+                }
+
+                int bytes = 1;
+                // 检测中文字符（高位字节大于0x80）
+                if (c > 0x80 && offset + 1 < g_processed_text_size) {
+                    if ((unsigned char)g_processed_text[offset+1] > 0x40) {
+                        bytes = 2;
+                    }
+                }
+
+                int width = (bytes == 2) ? Font12CN.Width : Font16.Width;
+
+                if (x + width > max_x)
+                    break;  // 达到行宽限制，换行
+
+                if (bytes == 2) has_cn = 1;
+                offset += bytes;
+                x += width;
+            }
+
+            page_has_content = 1; // 至少有一行内容
+            
+            int lh = has_cn ? lh_cn : lh_en;
+            if (y + lh > text_bottom)
+                break;
+
+            y += lh;
+        }
+        
+        // 如果这一页没有内容但是还有剩余文本，说明文本超出了页面空间
+        if(!page_has_content && offset < g_processed_text_size) {
+            printf("Warning: No content placed on page %d but text remains\n", count);
+            break;
+        }
+    }
+    
+    // 分配确切大小的页偏移数组
+    total_pages = count;
+    page_offsets = malloc(sizeof(size_t) * total_pages);
+    if (page_offsets) {
+        memcpy(page_offsets, temp_offsets, sizeof(size_t) * total_pages);
+        printf("Successfully calculated %d pages\n", total_pages);
+    } else {
+        printf("Error: Could not allocate memory for page offsets\n");
+    }
+    
+    free(temp_offsets);
+}
+
+// 获取当前页索引
+int get_current_page_index(size_t offset) {
+    if (!page_offsets || total_pages == 0) {
+        // 如果无法获取准确页数，使用估算方式
+        return (offset / 2000) + 1;
+    }
+    
+    // 二分查找当前偏移量所属的页
+    int left = 0, right = total_pages - 1;
+    int result = 0;
+    
+    while (left <= right) {
+        int mid = left + (right - left) / 2;
+        if (page_offsets[mid] <= offset) {
+            result = mid;
+            if (mid < total_pages - 1) {
+                left = mid + 1;
+            } else {
+                break;  // 已经是最后一页
+            }
+        } else {
+            if (mid > 0) {
+                right = mid - 1;
+            } else {
+                break;  // 已经是第一页
+            }
+        }
+    }
+    
+    return result + 1; // 页码从1开始
 }
 
 // 加载整个 TXT 文件到内存（GB2312 编码）
@@ -105,12 +344,25 @@ int load_txt_file(const char* path) {
     g_full_text[read_bytes] = '\0';
     g_text_size = read_bytes;
 
+    // 处理文本：去除多余的换行符，合并段落
+    if (g_processed_text) free(g_processed_text);
+    g_processed_text = process_text_content(g_full_text, g_text_size);
+    if (!g_processed_text) {
+        printf("Failed to process text content\n");
+        return -1;
+    }
+    g_processed_text_size = strlen(g_processed_text);
+
     // 重置状态
     g_current_char_offset = 0;
     history_top = -1; // 清空历史
     first_display_done = 0;
+    
+    // 计算页信息
+    calculate_page_info();
+    current_page_index = 1;  // 重置为第一页
 
-    printf("Loaded %zu bytes from %s\n", g_text_size, path);
+    printf("Loaded %zu bytes from %s, processed to %zu bytes\n", g_text_size, path, g_processed_text_size);
     return 0;
 }
 
@@ -128,11 +380,12 @@ void show_error(const char* msg) {
 // 核心：从指定偏移绘制一页，并返回下一页起始偏移
 size_t display_txt_page_from_offset(size_t start_offset)
 {
-    if (!g_full_text || start_offset >= g_text_size) {
+    // 使用处理后的文本而不是原始文本
+    if (!g_processed_text || start_offset >= g_processed_text_size) {
         Paint_SelectImage(g_frame_buffer);
         Paint_Clear(WHITE);
         EPD_7IN5_V2_Display(g_frame_buffer);
-        return g_text_size;
+        return g_processed_text_size;
     }
 
     Paint_SelectImage(g_frame_buffer);
@@ -163,9 +416,11 @@ size_t display_txt_page_from_offset(size_t start_offset)
 
         EPD_7IN5_V2_Init();
         EPD_7IN5_V2_Clear();
-        DEV_Delay_ms(1500);
+        // 减少延时时间以加快初始化速度
+        // DEV_Delay_ms(500); // 从1500ms减少到500ms
         EPD_7IN5_V2_Display(g_frame_buffer);
-        DEV_Delay_ms(500);
+        // 减少延时时间以加快初始化速度
+        // DEV_Delay_ms(200); // 从500ms减少到200ms
         EPD_7IN5_V2_Init_Part();
 
         first_display_done = 1;
@@ -202,7 +457,7 @@ size_t display_txt_page_from_offset(size_t start_offset)
         Paint_ClearWindows(
             0,
             CONTENT_Y_START,
-            EPD_7IN5_V2_WIDTH,
+            EPD_7IN5_V2_WIDTH-10,
             EPD_7IN5_V2_HEIGHT - CONTENT_Y_START,
             WHITE
         );
@@ -211,47 +466,49 @@ size_t display_txt_page_from_offset(size_t start_offset)
     /* =====================================================
      * 4. 正文排版绘制
      * ===================================================== */
-    const int left_margin = 10;
-    const int right_margin = 10;
-    const int max_x = EPD_7IN5_V2_WIDTH - right_margin;
+    const int left_margin = 0;
+    const int right_margin = 0;
+    const int max_x = EPD_7IN5_V2_WIDTH ;
 
     const int lh_en = Font16.Height;
     const int lh_cn = Font12CN.Height;
 
     int y = CONTENT_Y_START+HEADER_HEIGHT +10 ;
-    const int text_bottom = FOOTER_Y_START - 10;
+    const int text_bottom = FOOTER_Y_START ;
 
+    // 使用处理后的文本
     size_t i = start_offset;
 
-    while (i < g_text_size && y < text_bottom) {
-
-        /* 跳过空行 */
-        while (i < g_text_size &&
-              (g_full_text[i] == '\r' || g_full_text[i] == '\n')) {
-            i++;
-            y += lh_cn;
-            if (y >= text_bottom) break;
-        }
-        if (y >= text_bottom) break;
-
+    while (i < g_processed_text_size && y < text_bottom) {
         int x = left_margin;
         char line[512] = {0};
         int len = 0;
         int has_cn = 0;
 
-        while (i < g_text_size) {
-            unsigned char c = (unsigned char)g_full_text[i];
-            if (c == '\r' || c == '\n')
+        // 构建一行文本，直到达到最大宽度或遇到段落结束标记
+        while (i < g_processed_text_size) {
+            unsigned char c = (unsigned char)g_processed_text[i];
+            // 遇到段落结束标记，换行
+            if (c == '\n') {
+                i++;  // 跳过段落结束标记
                 break;
+            }
 
-            int bytes = (c > 0x80 && i + 1 < g_text_size) ? 2 : 1;
+            int bytes = 1;
+            // 检测中文字符（高位字节大于0x80）
+            if (c > 0x80 && i + 1 < g_processed_text_size) {
+                if ((unsigned char)g_processed_text[i+1] > 0x40) {
+                    bytes = 2;
+                }
+            }
+
             int width = (bytes == 2) ? Font12CN.Width : Font16.Width;
 
             if (x + width > max_x)
-                break;
+                break;  // 达到行宽限制，换行
 
-            for (int k = 0; k < bytes; k++)
-                line[len++] = g_full_text[i + k];
+            for (int k = 0; k < bytes && i + k < g_processed_text_size; k++)
+                line[len++] = g_processed_text[i + k];
 
             if (bytes == 2) has_cn = 1;
             i += bytes;
@@ -271,14 +528,10 @@ size_t display_txt_page_from_offset(size_t start_offset)
 
             y += lh;
         }
-
-        while (i < g_text_size &&
-              (g_full_text[i] == '\r' || g_full_text[i] == '\n'))
-            i++;
     }
 
     /* =====================================================
-     * 5. Footer：页码（下移10像素）
+     * 5. Footer：页码（使用准确的页数计算）
      * ===================================================== */
     Paint_ClearWindows(
         0,
@@ -288,17 +541,16 @@ size_t display_txt_page_from_offset(size_t start_offset)
         WHITE
     );
 
-    int total_pages = (g_text_size / 2000) + 1;
-    int cur_page = (start_offset / 2000) + 1;
-    if (cur_page > total_pages)
-        cur_page = total_pages;
+    // 使用准确的页数计算
+    int cur_page = get_current_page_index(start_offset);
+    int total_pages_calc = total_pages > 0 ? total_pages : (g_processed_text_size / 2000) + 1;
 
     char page[64];
-    snprintf(page, sizeof(page), "Page %d / %d", cur_page, total_pages);
+    snprintf(page, sizeof(page), "Page %d / %d", cur_page, total_pages_calc);
 
     Paint_DrawString_EN(
         EPD_7IN5_V2_WIDTH - 160,
-        FOOTER_Y_START +10,  // 页码下移20像素
+        FOOTER_Y_START +10,  // 页码下移10像素
         page,
         &Font16,
         BLACK,
@@ -319,8 +571,6 @@ size_t display_txt_page_from_offset(size_t start_offset)
     return i;
 }
 
-
-
 // 切换到下一本书
 void next_book() {
     if (book_count > 1) {
@@ -328,7 +578,7 @@ void next_book() {
         snprintf(current_file, sizeof(current_file), "%s", book_list[current_book_index]);
         if (load_txt_file(current_file) == 0) {
             g_current_char_offset = 0;
-            size_t next_offset = display_txt_page_from_offset(0);
+            display_txt_page_from_offset(0);
             // 新书开始，清空历史，压入第一页
             history_top = -1;
             if (history_top < MAX_HISTORY - 1) {
@@ -336,6 +586,7 @@ void next_book() {
             }
             // 重置书名标记，以便在切换到新书时重新绘制书名
             title_drawn = 0;
+            current_page_index = 1;  // 重置为第一页
             printf("Switched to book [%d]: %s\n", current_book_index, current_file);
         }
     }
@@ -348,7 +599,7 @@ void prev_book() {
         snprintf(current_file, sizeof(current_file), "%s", book_list[current_book_index]);
         if (load_txt_file(current_file) == 0) {
             g_current_char_offset = 0;
-            size_t next_offset = display_txt_page_from_offset(0);
+            display_txt_page_from_offset(0);
             // 新书开始，清空历史，压入第一页
             history_top = -1;
             if (history_top < MAX_HISTORY - 1) {
@@ -356,6 +607,7 @@ void prev_book() {
             }
             // 重置书名标记，以便在切换到新书时重新绘制书名
             title_drawn = 0;
+            current_page_index = 1;  // 重置为第一页
             printf("Switched to book [%d]: %s\n", current_book_index, current_file);
         }
     }
@@ -609,6 +861,8 @@ void EPD_7in5_V2_reader_txt(void) {
 
 cleanup:
     free(g_full_text);
+    free(g_processed_text);  // 释放处理后的文本
+    free(page_offsets);      // 释放页偏移数组
     free(g_frame_buffer);
     free(g_prev_frame_buffer);
     if (key1_fd >= 0) close(key1_fd);

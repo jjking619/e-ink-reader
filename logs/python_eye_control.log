@@ -1,0 +1,151 @@
+[ WARN:0@1.109] global cap_v4l.cpp:913 open VIDEOIO(V4L2:/dev/video0): can't open camera by index
+[ WARN:0@1.109] global obsensor_stream_channel_v4l2.cpp:82 xioctl ioctl: fd=5, req=-2140645888
+[ WARN:0@1.109] global obsensor_stream_channel_v4l2.cpp:138 queryUvcDeviceInfoList ioctl error return: 22
+[ WARN:0@1.109] global obsensor_stream_channel_v4l2.cpp:82 xioctl ioctl: fd=-1, req=-2140645888
+[ WARN:0@1.109] global obsensor_stream_channel_v4l2.cpp:138 queryUvcDeviceInfoList ioctl error return: 9
+[ WARN:0@1.109] global obsensor_stream_channel_v4l2.cpp:82 xioctl ioctl: fd=-1, req=-2140645888
+[ WARN:0@1.109] global obsensor_stream_channel_v4l2.cpp:138 queryUvcDeviceInfoList ioctl error return: 9
+[ WARN:0@1.109] global obsensor_stream_channel_v4l2.cpp:82 xioctl ioctl: fd=5, req=-2140645888
+[ WARN:0@1.109] global obsensor_stream_channel_v4l2.cpp:138 queryUvcDeviceInfoList ioctl error return: 22
+[ WARN:0@1.109] global obsensor_stream_channel_v4l2.cpp:82 xioctl ioctl: fd=5, req=-2140645888
+[ WARN:0@1.109] global obsensor_stream_channel_v4l2.cpp:138 queryUvcDeviceInfoList ioctl error return: 22
+[ WARN:0@1.109] global obsensor_stream_channel_v4l2.cpp:82 xioctl ioctl: fd=5, req=-2140645888
+[ WARN:0@1.109] global obsensor_stream_channel_v4l2.cpp:138 queryUvcDeviceInfoList ioctl error return: 25
+[ WARN:0@1.110] global obsensor_stream_channel_v4l2.cpp:82 xioctl ioctl: fd=5, req=-2140645888
+[ WARN:0@1.110] global obsensor_stream_channel_v4l2.cpp:138 queryUvcDeviceInfoList ioctl error return: 25
+[ WARN:0@1.110] global obsensor_stream_channel_v4l2.cpp:82 xioctl ioctl: fd=5, req=-2140645888
+[ WARN:0@1.110] global obsensor_stream_channel_v4l2.cpp:138 queryUvcDeviceInfoList ioctl error return: 25
+[ WARN:0@1.110] global obsensor_stream_channel_v4l2.cpp:82 xioctl ioctl: fd=5, req=-2140645888
+[ WARN:0@1.110] global obsensor_stream_channel_v4l2.cpp:138 queryUvcDeviceInfoList ioctl error return: 25
+[ WARN:0@1.110] global obsensor_stream_channel_v4l2.cpp:82 xioctl ioctl: fd=5, req=-2140645888
+[ WARN:0@1.110] global obsensor_stream_channel_v4l2.cpp:138 queryUvcDeviceInfoList ioctl error return: 25
+[ WARN:0@1.110] global obsensor_stream_channel_v4l2.cpp:82 xioctl ioctl: fd=5, req=-2140645888
+[ WARN:0@1.110] global obsensor_stream_channel_v4l2.cpp:138 queryUvcDeviceInfoList ioctl error return: 25
+[ WARN:0@1.110] global obsensor_stream_channel_v4l2.cpp:82 xioctl ioctl: fd=5, req=-2140645888
+[ WARN:0@1.110] global obsensor_stream_channel_v4l2.cpp:138 queryUvcDeviceInfoList ioctl error return: 25
+[ WARN:0@1.110] global obsensor_stream_channel_v4l2.cpp:82 xioctl ioctl: fd=5, req=-2140645888
+[ WARN:0@1.110] global obsensor_stream_channel_v4l2.cpp:138 queryUvcDeviceInfoList ioctl error return: 25
+[ WARN:0@1.110] global obsensor_stream_channel_v4l2.cpp:82 xioctl ioctl: fd=-1, req=-2140645888
+[ WARN:0@1.110] global obsensor_stream_channel_v4l2.cpp:138 queryUvcDeviceInfoList ioctl error return: 9
+[ WARN:0@1.110] global obsensor_stream_channel_v4l2.cpp:82 xioctl ioctl: fd=-1, req=-2140645888
+[ WARN:0@1.110] global obsensor_stream_channel_v4l2.cpp:138 queryUvcDeviceInfoList ioctl error return: 9
+INFO: Created TensorFlow Lite XNNPACK delegate for CPU.
+[ERROR:0@1.115] global obsensor_uvc_stream_channel.cpp:158 getStreamChannelGroup Camera index out of range
+[ WARN:0@1.115] global cap_v4l.cpp:913 open VIDEOIO(V4L2:/dev/video1): can't open camera by index
+[ WARN:0@1.115] global obsensor_stream_channel_v4l2.cpp:82 xioctl ioctl: fd=5, req=-2140645888
+[ WARN:0@1.115] global obsensor_stream_channel_v4l2.cpp:138 queryUvcDeviceInfoList ioctl error return: 22
+[ WARN:0@1.115] global obsensor_stream_channel_v4l2.cpp:82 xioctl ioctl: fd=-1, req=-2140645888
+[ WARN:0@1.115] global obsensor_stream_channel_v4l2.cpp:138 queryUvcDeviceInfoList ioctl error return: 9
+[ WARN:0@1.115] global obsensor_stream_channel_v4l2.cpp:82 xioctl ioctl: fd=-1, req=-2140645888
+[ WARN:0@1.115] global obsensor_stream_channel_v4l2.cpp:138 queryUvcDeviceInfoList ioctl error return: 9
+[ WARN:0@1.116] global obsensor_stream_channel_v4l2.cpp:82 xioctl ioctl: fd=5, req=-2140645888
+[ WARN:0@1.116] global obsensor_stream_channel_v4l2.cpp:138 queryUvcDeviceInfoList ioctl error return: 22
+[ WARN:0@1.116] global obsensor_stream_channel_v4l2.cpp:82 xioctl ioctl: fd=5, req=-2140645888
+[ WARN:0@1.116] global obsensor_stream_channel_v4l2.cpp:138 queryUvcDeviceInfoList ioctl error return: 22
+[ WARN:0@1.116] global obsensor_stream_channel_v4l2.cpp:82 xioctl ioctl: fd=5, req=-2140645888
+[ WARN:0@1.116] global obsensor_stream_channel_v4l2.cpp:138 queryUvcDeviceInfoList ioctl error return: 25
+[ WARN:0@1.116] global obsensor_stream_channel_v4l2.cpp:82 xioctl ioctl: fd=5, req=-2140645888
+[ WARN:0@1.116] global obsensor_stream_channel_v4l2.cpp:138 queryUvcDeviceInfoList ioctl error return: 25
+[ WARN:0@1.116] global obsensor_stream_channel_v4l2.cpp:82 xioctl ioctl: fd=5, req=-2140645888
+[ WARN:0@1.116] global obsensor_stream_channel_v4l2.cpp:138 queryUvcDeviceInfoList ioctl error return: 25
+[ WARN:0@1.116] global obsensor_stream_channel_v4l2.cpp:82 xioctl ioctl: fd=5, req=-2140645888
+[ WARN:0@1.116] global obsensor_stream_channel_v4l2.cpp:138 queryUvcDeviceInfoList ioctl error return: 25
+[ WARN:0@1.116] global obsensor_stream_channel_v4l2.cpp:82 xioctl ioctl: fd=5, req=-2140645888
+[ WARN:0@1.116] global obsensor_stream_channel_v4l2.cpp:138 queryUvcDeviceInfoList ioctl error return: 25
+[ WARN:0@1.116] global obsensor_stream_channel_v4l2.cpp:82 xioctl ioctl: fd=5, req=-2140645888
+[ WARN:0@1.116] global obsensor_stream_channel_v4l2.cpp:138 queryUvcDeviceInfoList ioctl error return: 25
+[ WARN:0@1.116] global obsensor_stream_channel_v4l2.cpp:82 xioctl ioctl: fd=5, req=-2140645888
+[ WARN:0@1.116] global obsensor_stream_channel_v4l2.cpp:138 queryUvcDeviceInfoList ioctl error return: 25
+[ WARN:0@1.116] global obsensor_stream_channel_v4l2.cpp:82 xioctl ioctl: fd=5, req=-2140645888
+[ WARN:0@1.116] global obsensor_stream_channel_v4l2.cpp:138 queryUvcDeviceInfoList ioctl error return: 25
+[ WARN:0@1.117] global obsensor_stream_channel_v4l2.cpp:82 xioctl ioctl: fd=-1, req=-2140645888
+[ WARN:0@1.117] global obsensor_stream_channel_v4l2.cpp:138 queryUvcDeviceInfoList ioctl error return: 9
+[ WARN:0@1.117] global obsensor_stream_channel_v4l2.cpp:82 xioctl ioctl: fd=-1, req=-2140645888
+[ WARN:0@1.117] global obsensor_stream_channel_v4l2.cpp:138 queryUvcDeviceInfoList ioctl error return: 9
+[ERROR:0@1.119] global obsensor_uvc_stream_channel.cpp:158 getStreamChannelGroup Camera index out of range
+[ WARN:0@1.120] global cap_v4l.cpp:913 open VIDEOIO(V4L2:/dev/video2): can't open camera by index
+[ WARN:0@1.120] global obsensor_stream_channel_v4l2.cpp:82 xioctl ioctl: fd=5, req=-2140645888
+[ WARN:0@1.120] global obsensor_stream_channel_v4l2.cpp:138 queryUvcDeviceInfoList ioctl error return: 22
+[ WARN:0@1.120] global obsensor_stream_channel_v4l2.cpp:82 xioctl ioctl: fd=-1, req=-2140645888
+[ WARN:0@1.120] global obsensor_stream_channel_v4l2.cpp:138 queryUvcDeviceInfoList ioctl error return: 9
+[ WARN:0@1.120] global obsensor_stream_channel_v4l2.cpp:82 xioctl ioctl: fd=-1, req=-2140645888
+[ WARN:0@1.120] global obsensor_stream_channel_v4l2.cpp:138 queryUvcDeviceInfoList ioctl error return: 9
+[ WARN:0@1.120] global obsensor_stream_channel_v4l2.cpp:82 xioctl ioctl: fd=5, req=-2140645888
+[ WARN:0@1.120] global obsensor_stream_channel_v4l2.cpp:138 queryUvcDeviceInfoList ioctl error return: 22
+[ WARN:0@1.120] global obsensor_stream_channel_v4l2.cpp:82 xioctl ioctl: fd=5, req=-2140645888
+[ WARN:0@1.120] global obsensor_stream_channel_v4l2.cpp:138 queryUvcDeviceInfoList ioctl error return: 22
+[ WARN:0@1.120] global obsensor_stream_channel_v4l2.cpp:82 xioctl ioctl: fd=5, req=-2140645888
+[ WARN:0@1.120] global obsensor_stream_channel_v4l2.cpp:138 queryUvcDeviceInfoList ioctl error return: 25
+[ WARN:0@1.120] global obsensor_stream_channel_v4l2.cpp:82 xioctl ioctl: fd=5, req=-2140645888
+[ WARN:0@1.120] global obsensor_stream_channel_v4l2.cpp:138 queryUvcDeviceInfoList ioctl error return: 25
+[ WARN:0@1.120] global obsensor_stream_channel_v4l2.cpp:82 xioctl ioctl: fd=5, req=-2140645888
+[ WARN:0@1.120] global obsensor_stream_channel_v4l2.cpp:138 queryUvcDeviceInfoList ioctl error return: 25
+[ WARN:0@1.120] global obsensor_stream_channel_v4l2.cpp:82 xioctl ioctl: fd=5, req=-2140645888
+[ WARN:0@1.120] global obsensor_stream_channel_v4l2.cpp:138 queryUvcDeviceInfoList ioctl error return: 25
+[ WARN:0@1.120] global obsensor_stream_channel_v4l2.cpp:82 xioctl ioctl: fd=5, req=-2140645888
+[ WARN:0@1.120] global obsensor_stream_channel_v4l2.cpp:138 queryUvcDeviceInfoList ioctl error return: 25
+[ WARN:0@1.121] global obsensor_stream_channel_v4l2.cpp:82 xioctl ioctl: fd=5, req=-2140645888
+[ WARN:0@1.121] global obsensor_stream_channel_v4l2.cpp:138 queryUvcDeviceInfoList ioctl error return: 25
+[ WARN:0@1.121] global obsensor_stream_channel_v4l2.cpp:82 xioctl ioctl: fd=5, req=-2140645888
+[ WARN:0@1.121] global obsensor_stream_channel_v4l2.cpp:138 queryUvcDeviceInfoList ioctl error return: 25
+[ WARN:0@1.121] global obsensor_stream_channel_v4l2.cpp:82 xioctl ioctl: fd=5, req=-2140645888
+[ WARN:0@1.121] global obsensor_stream_channel_v4l2.cpp:138 queryUvcDeviceInfoList ioctl error return: 25
+[ WARN:0@1.121] global obsensor_stream_channel_v4l2.cpp:82 xioctl ioctl: fd=-1, req=-2140645888
+[ WARN:0@1.121] global obsensor_stream_channel_v4l2.cpp:138 queryUvcDeviceInfoList ioctl error return: 9
+[ WARN:0@1.121] global obsensor_stream_channel_v4l2.cpp:82 xioctl ioctl: fd=-1, req=-2140645888
+[ WARN:0@1.121] global obsensor_stream_channel_v4l2.cpp:138 queryUvcDeviceInfoList ioctl error return: 9
+[ERROR:0@1.126] global obsensor_uvc_stream_channel.cpp:158 getStreamChannelGroup Camera index out of range
+[ WARN:0@1.126] global cap_v4l.cpp:913 open VIDEOIO(V4L2:/dev/video3): can't open camera by index
+[ WARN:0@1.127] global obsensor_stream_channel_v4l2.cpp:82 xioctl ioctl: fd=5, req=-2140645888
+[ WARN:0@1.127] global obsensor_stream_channel_v4l2.cpp:138 queryUvcDeviceInfoList ioctl error return: 22
+[ WARN:0@1.127] global obsensor_stream_channel_v4l2.cpp:82 xioctl ioctl: fd=-1, req=-2140645888
+[ WARN:0@1.127] global obsensor_stream_channel_v4l2.cpp:138 queryUvcDeviceInfoList ioctl error return: 9
+[ WARN:0@1.127] global obsensor_stream_channel_v4l2.cpp:82 xioctl ioctl: fd=-1, req=-2140645888
+[ WARN:0@1.127] global obsensor_stream_channel_v4l2.cpp:138 queryUvcDeviceInfoList ioctl error return: 9
+[ WARN:0@1.127] global obsensor_stream_channel_v4l2.cpp:82 xioctl ioctl: fd=5, req=-2140645888
+[ WARN:0@1.127] global obsensor_stream_channel_v4l2.cpp:138 queryUvcDeviceInfoList ioctl error return: 22
+[ WARN:0@1.127] global obsensor_stream_channel_v4l2.cpp:82 xioctl ioctl: fd=5, req=-2140645888
+[ WARN:0@1.127] global obsensor_stream_channel_v4l2.cpp:138 queryUvcDeviceInfoList ioctl error return: 22
+[ WARN:0@1.127] global obsensor_stream_channel_v4l2.cpp:82 xioctl ioctl: fd=5, req=-2140645888
+[ WARN:0@1.127] global obsensor_stream_channel_v4l2.cpp:138 queryUvcDeviceInfoList ioctl error return: 25
+[ WARN:0@1.127] global obsensor_stream_channel_v4l2.cpp:82 xioctl ioctl: fd=5, req=-2140645888
+[ WARN:0@1.127] global obsensor_stream_channel_v4l2.cpp:138 queryUvcDeviceInfoList ioctl error return: 25
+[ WARN:0@1.127] global obsensor_stream_channel_v4l2.cpp:82 xioctl ioctl: fd=5, req=-2140645888
+[ WARN:0@1.127] global obsensor_stream_channel_v4l2.cpp:138 queryUvcDeviceInfoList ioctl error return: 25
+[ WARN:0@1.127] global obsensor_stream_channel_v4l2.cpp:82 xioctl ioctl: fd=5, req=-2140645888
+[ WARN:0@1.127] global obsensor_stream_channel_v4l2.cpp:138 queryUvcDeviceInfoList ioctl error return: 25
+[ WARN:0@1.127] global obsensor_stream_channel_v4l2.cpp:82 xioctl ioctl: fd=5, req=-2140645888
+[ WARN:0@1.127] global obsensor_stream_channel_v4l2.cpp:138 queryUvcDeviceInfoList ioctl error return: 25
+[ WARN:0@1.127] global obsensor_stream_channel_v4l2.cpp:82 xioctl ioctl: fd=5, req=-2140645888
+[ WARN:0@1.127] global obsensor_stream_channel_v4l2.cpp:138 queryUvcDeviceInfoList ioctl error return: 25
+[ WARN:0@1.127] global obsensor_stream_channel_v4l2.cpp:82 xioctl ioctl: fd=5, req=-2140645888
+[ WARN:0@1.127] global obsensor_stream_channel_v4l2.cpp:138 queryUvcDeviceInfoList ioctl error return: 25
+[ WARN:0@1.128] global obsensor_stream_channel_v4l2.cpp:82 xioctl ioctl: fd=5, req=-2140645888
+[ WARN:0@1.128] global obsensor_stream_channel_v4l2.cpp:138 queryUvcDeviceInfoList ioctl error return: 25
+[ WARN:0@1.128] global obsensor_stream_channel_v4l2.cpp:82 xioctl ioctl: fd=-1, req=-2140645888
+[ WARN:0@1.128] global obsensor_stream_channel_v4l2.cpp:138 queryUvcDeviceInfoList ioctl error return: 9
+[ WARN:0@1.128] global obsensor_stream_channel_v4l2.cpp:82 xioctl ioctl: fd=-1, req=-2140645888
+[ WARN:0@1.128] global obsensor_stream_channel_v4l2.cpp:138 queryUvcDeviceInfoList ioctl error return: 9
+[ERROR:0@1.131] global obsensor_uvc_stream_channel.cpp:158 getStreamChannelGroup Camera index out of range
+[INFO] Searching for available cameras...
+[INFO] Device path exists: /dev/video0
+[WARNING] Failed to open camera at index: 0
+[INFO] Device path exists: /dev/video1
+[WARNING] Failed to open camera at index: 1
+[INFO] Device path exists: /dev/video2
+[WARNING] Failed to open camera at index: 2
+[INFO] Device path exists: /dev/video3
+[WARNING] Failed to open camera at index: 3
+[INFO] Device path does not exist: /dev/video4
+[INFO] Device path does not exist: /dev/video5
+[INFO] Device path does not exist: /dev/video6
+[INFO] Device path does not exist: /dev/video7
+[INFO] Device path does not exist: /dev/video8
+[INFO] Device path does not exist: /dev/video9
+Traceback (most recent call last):
+  File "/home/pi/ebook-reader/src/main.py", line 98, in <module>
+    CAMERA_INDEX = find_available_camera()
+  File "/home/pi/ebook-reader/src/main.py", line 54, in find_available_camera
+    raise RuntimeError("No camera found")
+RuntimeError: No camera found
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             The X11 connection broke (error 1). Did the X11 server die?
