@@ -664,10 +664,13 @@ void enter_screen_off_mode() {
     Paint_SelectImage(g_frame_buffer);
     Paint_Clear(WHITE);
     
-    // 绘制息屏文字
-    Paint_DrawString_EN(10, 50, "Sleeping", &Font16, BLACK, WHITE);
-    Paint_DrawString_EN(10, 100, "Please look at the camera.", &Font16, BLACK, WHITE);
-    Paint_DrawString_EN(10, 150, "To wake up the reader", &Font16, BLACK, WHITE);
+    // 显示息屏图片，使用GUI_ReadBmp函数
+    if(GUI_ReadBmp("/home/pi/ebook-reader/src/c/pic/1.bmp", 0, 0) != 0) {
+        // 如果加载图片失败，则显示文字提示
+        Paint_DrawString_EN(10, 50, "Sleeping", &Font16, BLACK, WHITE);
+        Paint_DrawString_EN(10, 100, "Please look at the camera.", &Font16, BLACK, WHITE);
+        Paint_DrawString_EN(10, 150, "To wake up the reader", &Font16, BLACK, WHITE);
+    }
     
     // 显示息屏画面
     EPD_7IN5_V2_Init();
