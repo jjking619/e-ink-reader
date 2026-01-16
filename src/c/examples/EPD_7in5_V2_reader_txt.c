@@ -19,6 +19,10 @@
 #include "DEV_Config.h"
 #include <sys/types.h>  // 添加此头文件以定义DT_REG
 
+// 定义自定义的息屏和唤醒信号
+#define CUSTOM_SCREEN_OFF_BTN BTN_LEFT
+#define CUSTOM_SCREEN_ON_BTN BTN_RIGHT
+
 #define BOOK_PATH "/home/pi/ebook-reader/src/tools/books"
 #define MAX_BOOK_SIZE (4* 1024 * 1024) // 4MB
 #define MAX_BOOKS 20
@@ -31,10 +35,8 @@
 #define CONTENT_Y_START   (HEADER_HEIGHT + 8)
 #define FOOTER_Y_START    (EPD_7IN5_V2_HEIGHT - FOOTER_HEIGHT)
 
-// #define LINE 5
-
-// #define TEXT_TOP        HEADER_HEIGHT
-// #define TEXT_BOTTOM     (EPD_7IN5_V2_HEIGHT - FOOTER_HEIGHT)
+// 息屏相关定义
+static int screen_off = 0;  // 是否处于息屏状态
 
 static char current_file[256] = {0};
 static UBYTE *g_frame_buffer = NULL;
@@ -79,6 +81,8 @@ void calculate_page_info();
 int get_current_page_index(size_t offset);
 int find_eye_control_device();
 void init_eye_control_device();
+void enter_screen_off_mode();
+void exit_screen_off_mode();
 
 const char* get_ext(const char* filename) {
     const char* dot = strrchr(filename, '.');
@@ -112,7 +116,7 @@ int find_eye_control_device() {
 // 初始化虚拟设备，带重试机制
 void init_eye_control_device() {
     int attempts = 0;
-    const int max_attempts = 30; // 尝试30次，每次间隔1秒
+    const int max_attempts = 10; // 尝试10次，每次间隔1秒
     
     printf("Waiting for eye control device...\n");
     
@@ -518,7 +522,7 @@ size_t display_txt_page_from_offset(size_t start_offset)
      * 4. 正文排版绘制
      * ===================================================== */
     const int left_margin = 0;
-    const int right_margin = 0;
+    // const int right_margin = 0;
     const int max_x = EPD_7IN5_V2_WIDTH ;
 
     const int lh_en = Font16.Height;
@@ -649,6 +653,44 @@ size_t display_txt_page_from_offset(size_t start_offset)
     return i;  // 返回实际结束的偏移量
 }
 
+// 进入息屏模式
+void enter_screen_off_mode() {
+    if (screen_off) return; // 如果已经在息屏状态，直接返回
+
+    printf("Entering screen off mode...\n");
+    screen_off = 1;
+
+    // 创建息屏画面
+    Paint_SelectImage(g_frame_buffer);
+    Paint_Clear(WHITE);
+    
+    // 绘制息屏文字
+    Paint_DrawString_EN(10, 50, "Sleeping", &Font16, BLACK, WHITE);
+    Paint_DrawString_EN(10, 100, "Please look at the camera.", &Font16, BLACK, WHITE);
+    Paint_DrawString_EN(10, 150, "To wake up the reader", &Font16, BLACK, WHITE);
+    
+    // 显示息屏画面
+    EPD_7IN5_V2_Init();
+    EPD_7IN5_V2_Display(g_frame_buffer);
+    EPD_7IN5_V2_Sleep(); // 进入休眠模式以节省电力
+}
+
+// 退出息屏模式
+void exit_screen_off_mode() {
+    if (!screen_off) return; // 如果不在息屏状态，直接返回
+
+    printf("Exiting screen off mode...\n");
+    screen_off = 0;
+
+    // 重新初始化EPD
+    EPD_7IN5_V2_Init();
+    EPD_7IN5_V2_Clear();
+    EPD_7IN5_V2_Init_Part();
+
+    // 重新显示当前页面
+    display_txt_page_from_offset(g_current_char_offset);
+}
+
 // 切换到下一本书
 void next_book() {
     if (book_count > 1) {
@@ -695,78 +737,19 @@ void prev_book() {
 void handle_keys(void) {
     struct input_event ev;
 
-    // KEY2: 上一页 / 上一本书
-    while (read(key2_fd, &ev, sizeof(ev)) == sizeof(ev)) {
-        if (ev.type == EV_KEY && ev.value == 1) {
-            struct timeval press_time, release_time;
-            gettimeofday(&press_time, NULL);
-            while (1) {
-                if (read(key2_fd, &ev, sizeof(ev)) == sizeof(ev) && ev.type == EV_KEY && ev.value == 0) {
-                    gettimeofday(&release_time, NULL);
-                    break;
-                }
-                usleep(10000);
-            }
-            long press_ms = (release_time.tv_sec - press_time.tv_sec) * 1000 +
-                           (release_time.tv_usec - press_time.tv_usec) / 1000;
-
-            if (press_ms > 1000) {
-                // 长按：上一本书
-                prev_book();
-            } else {
-                // 短按：上一页
-                if (history_top > -1) {
-                    g_current_char_offset = history_stack[history_top--];
-                    display_txt_page_from_offset(g_current_char_offset);
-                    printf("Back to page at offset %zu\n", g_current_char_offset);
-                } else {
-                    printf("Already at first page.\n");
-                }
-            }
-            break;
-        }
-    }
-
-    // KEY1: 下一页 / 下一本书
-    while (read(key1_fd, &ev, sizeof(ev)) == sizeof(ev)) {
-        if (ev.type == EV_KEY && ev.value == 1) {
-            struct timeval press_time, release_time;
-            gettimeofday(&press_time, NULL);
-            while (1) {
-                if (read(key1_fd, &ev, sizeof(ev)) == sizeof(ev) && ev.type == EV_KEY && ev.value == 0) {
-                    gettimeofday(&release_time, NULL);
-                    break;
-                }
-                usleep(10000);
-            }
-            long press_ms = (release_time.tv_sec - press_time.tv_sec) * 1000 +
-                           (release_time.tv_usec - press_time.tv_usec) / 1000;
-
-            if (press_ms > 1000) {
-                // 长按：下一本书
-                next_book();
-            } else {
-                // 短按：下一页
-                if (g_current_char_offset < g_text_size) {
-                    // 保存当前页偏移到历史栈
-                    if (history_top < MAX_HISTORY - 1) {
-                        history_stack[++history_top] = g_current_char_offset;
-                    }
-                    size_t next_offset = display_txt_page_from_offset(g_current_char_offset);
-                    g_current_char_offset = next_offset;
-                    printf("Next page from offset %zu\n", g_current_char_offset);
-                } else {
-                    printf("End of book.\n");
-                }
-            }
-            break;
-        }
-    }
-
-    // 眼控设备事件处理 - 只处理来自虚拟设备的事件
+    // 处理眼控设备事件 - 只处理来自虚拟设备的事件
     if (eye_key_fd >= 0) {
         while (read(eye_key_fd, &ev, sizeof(ev)) == sizeof(ev)) {
             if (ev.type == EV_KEY && ev.value == 1) {
+                // 检查是否是息屏或唤醒信号 (使用鼠标按键代替原来的标准按键)
+                if (ev.code == CUSTOM_SCREEN_OFF_BTN) {  // 使用自定义的息屏信号
+                    enter_screen_off_mode();
+                    continue;
+                } else if (ev.code == CUSTOM_SCREEN_ON_BTN) {  // 使用自定义的唤醒信号
+                    exit_screen_off_mode();
+                    continue;
+                }
+                
                 // 打印键值，用于调试
                 printf("[EYE] Key pressed: %d (%s)\n", ev.code, 
                        ev.code == KEY_PAGEUP ? "KEY_PAGEUP" : 
