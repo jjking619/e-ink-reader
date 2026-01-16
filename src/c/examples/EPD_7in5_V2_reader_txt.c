@@ -15,6 +15,7 @@
 #include <errno.h>
 #include <sys/time.h>
 #include <lgpio.h>
+#include <sys/ioctl.h>
 #include "DEV_Config.h"
 #include <sys/types.h>  // 添加此头文件以定义DT_REG
 
@@ -76,10 +77,58 @@ static int current_page_index = 0;   // 当前页索引（从0开始）
 char* process_text_content(const char* raw_text, size_t raw_size);
 void calculate_page_info();
 int get_current_page_index(size_t offset);
+int find_eye_control_device();
+void init_eye_control_device();
 
 const char* get_ext(const char* filename) {
     const char* dot = strrchr(filename, '.');
     return (dot && dot != filename) ? dot + 1 : "";
+}
+
+// 函数：查找名为eye_page_turner的输入设备
+int find_eye_control_device() {
+    char name[256] = {0};
+    int fd;
+    int i;
+    char fname[64];  // 设备文件名模板
+    
+    // 遍历/dev/input/event*设备
+    for (i = 0; i < 32; i++) {
+        sprintf(fname, "/dev/input/event%d", i);
+        fd = open(fname, O_RDONLY | O_NONBLOCK);
+        if (fd >= 0) {
+            // 读取设备名称
+            ioctl(fd, EVIOCGNAME(sizeof(name) - 1), name);
+            if (strstr(name, "eye_page_turner")) {
+                printf("Found eye control device: %s (%s)\n", fname, name);
+                return fd;
+            }
+            close(fd);
+        }
+    }
+    return -1;
+}
+
+// 初始化虚拟设备，带重试机制
+void init_eye_control_device() {
+    int attempts = 0;
+    const int max_attempts = 30; // 尝试30次，每次间隔1秒
+    
+    printf("Waiting for eye control device...\n");
+    
+    while (attempts < max_attempts) {
+        eye_key_fd = find_eye_control_device();
+        if (eye_key_fd >= 0) {
+            printf("Successfully connected to eye control device!\n");
+            return;
+        }
+        
+        printf("Attempt %d/%d: Eye control device not found, waiting...\n", attempts+1, max_attempts);
+        sleep(1); // 等待1秒后重试
+        attempts++;
+    }
+    
+    printf("Warning: Failed to connect to eye control device after %d attempts\n", max_attempts);
 }
 
 // 处理文本内容：合并段落，去除多余换行
@@ -817,16 +866,23 @@ void EPD_7in5_V2_reader_txt(void) {
     key1_fd = open("/dev/input/event3", O_RDONLY | O_NONBLOCK);
     key2_fd = open("/dev/input/event1", O_RDONLY | O_NONBLOCK);
 
-    // 打开虚拟眼控设备
-    eye_key_fd = open("/dev/input/event9", O_RDONLY | O_NONBLOCK); // 注意：event9 是从 /proc/bus/input/devices 查到的
-    if (eye_key_fd < 0) {
-        printf("Warning: Failed to open eye control device\n");
-        // 继续运行，即使没有眼控设备也能用物理按键
+    if (key1_fd < 0 || key2_fd < 0) {
+        printf("Physical key devices not found\n");
+        goto cleanup;
     }
 
-    if (key1_fd < 0 || key2_fd < 0) {
-        printf("Key devices not found\n");
-        goto cleanup;
+    // 初始化虚拟眼控设备，带重试机制
+    init_eye_control_device();
+
+    // 动态查找虚拟眼控设备
+    eye_key_fd = find_eye_control_device();
+    if (eye_key_fd < 0) {
+        printf("Warning: Failed to find eye control device, attempting to open event9 as fallback\n");
+        // 备选方案：尝试打开event9
+        eye_key_fd = open("/dev/input/event9", O_RDONLY | O_NONBLOCK);
+        if(eye_key_fd < 0) {
+            printf("Warning: Failed to open fallback eye control device\n");
+        }
     }
 
     DIR* dir = opendir(BOOK_PATH);

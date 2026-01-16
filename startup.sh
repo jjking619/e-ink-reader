@@ -46,7 +46,7 @@ mkdir -p logs
 
 # 启动Python眼动控制脚本 (后台运行)
 echo "启动Python眼动控制脚本..."
-python3 src/main.py > logs/python_eye_control.log 2>&1 &
+python3 main.py > logs/python_eye_control.log 2>&1 &
 PYTHON_PID=$!
 
 # 检查Python进程是否成功启动
