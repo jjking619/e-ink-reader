@@ -686,12 +686,29 @@ void exit_screen_off_mode() {
     screen_off = 0;
 
     // 重新初始化EPD
-    EPD_7IN5_V2_Init();
-    EPD_7IN5_V2_Clear();
-    EPD_7IN5_V2_Init_Part();
+    // EPD_7IN5_V2_Init();
+    // EPD_7IN5_V2_Clear();
+    // EPD_7IN5_V2_Init_Part();
 
-    // 重新显示当前页面
+    // 设置first_display_done为0，book_changed为0，确保Header区域会被重新绘制
+    first_display_done = 0;
+    book_changed = 0;
+    header_drawn = 0;
+
+    // 重新显示当前页面，这会重新绘制整个界面
     display_txt_page_from_offset(g_current_char_offset);
+    
+    // 息屏期间可能累积了一些输入事件，这里读取并丢弃它们，避免误操作
+    struct input_event ev;
+    if (eye_key_fd >= 0) {
+        // 清空眼控设备中积压的事件
+        while (read(eye_key_fd, &ev, sizeof(ev)) == sizeof(ev)) {
+            // 循环读取直到没有更多事件
+        }
+    }
+    
+    // 添加短暂延迟，确保系统有时间处理上述事件
+    usleep(100000); // 100ms延迟
 }
 
 // 切换到下一本书
