@@ -12,3 +12,143 @@ Bulid Smarter World
 Bulid Smarter World
 Bulid Smarter World
 Bulid Smarter World
+# VNC远程桌面
+
+**VNC** 的全称是 **Virtual Network Computing**，即虚拟网络计算。它是一种**图形化桌面共享系统**，允许你通过网络远程查看并控制另一台计算机的**完整桌面环境**。
+
+>注：VNC 远程需要双方设备处于同一局域网下，且目标设备需要开启 VNC 服务。
+
+**Debian** 系统由于底层 **Wayland** 存在协议兼容性问题，目前只能采取 **Xvfb + x11vnc** 方案。
+
+
+### 安装必要软件
+
+使用调试串口或者 `adb shell` 进入终端窗口，输入以下命令
+
+```bash
+sudo apt update
+sudo apt install -y xvfb xfce4 x11vnc
+```
+
+- 遇到选项时，直接按`回车键`即可
+
+
+### 设置 VNC 密码
+
+在设备终端上输入以下命令：
+
+```bash
+# 按提示连续输入2次密码
+mkdir -p ~/.vnc
+x11vnc -storepasswd
+```
+
+
+### 创建启动脚本
+
+在设备终端上输入以下命令：
+
+```bash
+# 创建脚本
+cat > ~/vnc_start.sh << 'EOF'
+#!/bin/bash
+echo "=== Starting Reliable VNC Server ==="
+
+pkill Xvfb
+pkill x11vnc
+pkill startxfce4
+
+sleep 2
+
+echo "1. Starting virtual display..."
+Xvfb :99 -screen 0 1280x720x24 -ac &
+sleep 5
+
+echo "2. Setting display environment..."
+export DISPLAY=:99
+
+echo "3. Starting desktop environment..."
+startxfce4 &
+sleep 10
+
+echo "4. Starting VNC server..."
+x11vnc -display :99 -forever -shared -rfbauth ~/.vnc/passwd -rfbport 5900 -bg
+sleep 3
+
+echo "=== Verification ==="
+echo "VNC Process: $(ps aux | grep x11vnc | grep -v grep | wc -l)"
+echo "Port Status: $(ss -tlnp | grep 5900 | wc -l)"
+
+echo ""
+echo " VNC SERVER READY!"
+echo " Connect to: $(hostname -I | awk '{print $1}'):5900"
+echo " No password required"
+echo " Full desktop environment available"
+EOF
+
+# 修改权限
+chmod +x ~/vnc_start.sh
+```
+
+- 设置登录密码，x11vnc -display :99 -forever -shared -rfbauth ~/.vnc/passwd -rfbport 5900 -bg
+- 不设置登录密码，x11vnc -display :99 -forever -shared -nopw -rfbport 5900 -bg
+
+
+### 切换x11会话
+
+```bash
+# 编辑 GDM 配置强制使用 X11
+sudo nano /etc/gdm3/daemon.conf
+
+# 在文件中取消注释（即去掉最前面的#），不使用 wayland 协议
+WaylandEnable=false
+
+# 重启 GDM
+sudo systemctl restart gdm3
+```
+
+- **GDM** 配置强制使用 **X11** 后，设备连接的显示屏将不能显示
+
+### 管理命令
+
+```bash
+# 启动 VNC
+./vnc_start.sh
+
+# 停止 VNC
+pkill Xvfb
+pkill x11vnc
+
+# 查看状态
+ps aux | grep -E "(Xvfb|x11vnc)"
+ss -tlnp | grep 5900
+```
+
+### 测试连接
+
+```bash
+# 从其他电脑连接,按提示输入密码即可登录
+# 例如 vncviewer 10.66.82.*:5900
+vncviewer <设备 IP 地址>:5900
+```
+
+- 连接成功后，你将会看到以下画面
+  <img src="././media/image_1.png" style="zoom:80%;" />
+
+### 恢复显示
+
+**GDM** 配置强制使用 **X11** 后，设备连接的显示屏将不能显示，若想恢复显示，需输入以下命令
+
+```bash
+# 编辑 GDM 配置
+sudo nano /etc/gdm3/daemon.conf
+
+# 在文件中添加注释（即加上最前面的#），使用 wayland 协议
+#WaylandEnable=false
+
+# 重启 GDM
+sudo systemctl restart gdm3
+```
+
+- 目前测试可能还存在 **bug**，恢复后鼠标图标有可能找不到
+

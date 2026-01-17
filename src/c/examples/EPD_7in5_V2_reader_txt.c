@@ -18,6 +18,7 @@
 #include <sys/ioctl.h>
 #include "DEV_Config.h"
 #include <sys/types.h>  // 添加此头文件以定义DT_REG
+#include <poll.h>
 
 // 定义自定义的息屏和唤醒信号
 #define CUSTOM_SCREEN_OFF_BTN BTN_LEFT
@@ -456,7 +457,18 @@ size_t display_txt_page_from_offset(size_t start_offset)
         const char* name = strrchr(current_file, '/');
         name = name ? name + 1 : current_file;
 
-        snprintf(title, sizeof(title), "Book: %s", name);
+        // 创建副本并去掉后缀
+        char display_name[256];
+        strncpy(display_name, name, sizeof(display_name)-1);
+        display_name[sizeof(display_name)-1] = 0;
+
+        // 查找最后一个点
+        char *dot = strrchr(display_name, '.');
+        if (dot && dot != display_name) {
+            *dot = 0;
+        }
+
+        snprintf(title, sizeof(title), "Book: %s", display_name);
         Paint_DrawString_EN(10, 10, title, &Font16, BLACK, WHITE);
 
         Paint_DrawLine(
@@ -753,89 +765,142 @@ void prev_book() {
     }
 }
 
-// 按键处理
+// 新增：按键状态跟踪结构体
+typedef struct {
+    struct timeval press_time;
+    int pressed;
+    int key_id;
+} KeyState;
+
+static KeyState key_states[3] = {0}; // 索引0未使用，1=KEY1, 2=KEY2
+
+// 新增：按键事件处理函数
+void handle_key_event(int key_id, struct input_event *ev) {
+    if (ev->type != EV_KEY) return;
+
+    // 新增：打印实际接收到的按键码，便于调试
+    printf("Received key event: id=%d, code=%d, value=%d\n", key_id, ev->code, ev->value);
+
+    // 检查是否是支持的按键码
+    if (key_id == 1) {
+        if (!(ev->code == KEY_PAGEDOWN || 
+              ev->code == BTN_LEFT || 
+              ev->code == BTN_RIGHT || 
+              ev->code == BTN_MIDDLE || 
+              ev->code == KEY_NEXTSONG ||
+              ev->code == BTN_EXTRA ||
+              ev->code == KEY_VOLUMEDOWN)) {  // 添加实际使用的按键码
+            printf("Key1: Ignoring code %d\n", ev->code);
+            return;
+        }
+    } else if (key_id == 2) {
+        if (!(ev->code == KEY_PAGEUP || 
+              ev->code == BTN_BASE ||
+              ev->code == KEY_VOLUMEUP)) {  // 添加实际使用的按键码
+            printf("Key2: Ignoring code %d\n", ev->code);
+            return;
+        }
+    }
+
+    if (ev->value == 1) {  // key down
+        gettimeofday(&key_states[key_id].press_time, NULL);
+        key_states[key_id].pressed = 1;
+    }
+    else if (ev->value == 0 && key_states[key_id].pressed) { // key up
+        struct timeval now;
+        gettimeofday(&now, NULL);
+
+        long press_ms =
+            (now.tv_sec - key_states[key_id].press_time.tv_sec) * 1000 +
+            (now.tv_usec - key_states[key_id].press_time.tv_usec) / 1000;
+
+        key_states[key_id].pressed = 0;
+
+        if (press_ms > 1000) {
+            if (key_id == 1) next_book();
+            else prev_book();
+        } else {
+            if (key_id == 1) {
+                if (g_current_char_offset < g_processed_text_size) {
+                    if (history_top < MAX_HISTORY - 1) {
+                        history_stack[++history_top] = g_current_char_offset;
+                    }
+                    size_t next_offset = display_txt_page_from_offset(g_current_char_offset);
+                    g_current_char_offset = next_offset;
+                    printf("Next page from key1 at offset %zu\n", g_current_char_offset);
+                } else {
+                    printf("End of book.\n");
+                }
+            } else {
+                if (history_top > -1) {
+                    g_current_char_offset = history_stack[history_top--];
+                    display_txt_page_from_offset(g_current_char_offset);
+                    printf("Back to page at offset %zu\n", g_current_char_offset);
+                } else {
+                    printf("Already at first page.\n");
+                }
+            }
+        }
+    }
+}
+
+// 修改：使用poll机制处理按键事件
 void handle_keys(void) {
+    struct pollfd fds[3];
     struct input_event ev;
 
-    // 处理眼控设备事件 - 只处理来自虚拟设备的事件
+    // 设置poll描述符
+    fds[0].fd = key1_fd;
+    fds[0].events = POLLIN;
+    fds[1].fd = key2_fd;
+    fds[1].events = POLLIN;
+
+    // 添加眼动设备到poll
+    int num_fds = 2;
     if (eye_key_fd >= 0) {
-        while (read(eye_key_fd, &ev, sizeof(ev)) == sizeof(ev)) {
+        fds[2].fd = eye_key_fd;
+        fds[2].events = POLLIN;
+        num_fds = 3;
+    }
+
+    // 非阻塞轮询
+    int ret = poll(fds, num_fds, 0);
+    if (ret <= 0) return;
+
+    // 处理KEY1事件
+    if (fds[0].revents & POLLIN) {
+        if (read(key1_fd, &ev, sizeof(ev)) == sizeof(ev)) {
+            handle_key_event(1, &ev);
+        }
+    }
+
+    // 处理KEY2事件
+    if (fds[1].revents & POLLIN) {
+        if (read(key2_fd, &ev, sizeof(ev)) == sizeof(ev)) {
+            handle_key_event(2, &ev);
+        }
+    }
+
+    // 处理眼动设备事件
+    if (num_fds > 2 && (fds[2].revents & POLLIN)) {
+        if (read(eye_key_fd, &ev, sizeof(ev)) == sizeof(ev)) {
             if (ev.type == EV_KEY && ev.value == 1) {
-                // 检查是否是息屏或唤醒信号 (使用鼠标按键代替原来的标准按键)
-                if (ev.code == CUSTOM_SCREEN_OFF_BTN) {  // 使用自定义的息屏信号
+                // 检查是否是息屏或唤醒信号
+                if (ev.code == CUSTOM_SCREEN_OFF_BTN) {
                     enter_screen_off_mode();
-                    continue;
-                } else if (ev.code == CUSTOM_SCREEN_ON_BTN) {  // 使用自定义的唤醒信号
+                } else if (ev.code == CUSTOM_SCREEN_ON_BTN) {
                     exit_screen_off_mode();
-                    continue;
-                }
-                
-                // 打印键值，用于调试
-                printf("[EYE] Key pressed: %d (%s)\n", ev.code, 
-                       ev.code == KEY_PAGEUP ? "KEY_PAGEUP" : 
-                       ev.code == KEY_PAGEDOWN ? "KEY_PAGEDOWN" :
-                       ev.code == KEY_NEXT ? "KEY_NEXT" :
-                       ev.code == KEY_PREVIOUS ? "KEY_PREVIOUS" : "OTHER");
-
-                struct timeval press_time, release_time;
-                gettimeofday(&press_time, NULL);
-                while (1) {
-                    if (read(eye_key_fd, &ev, sizeof(ev)) == sizeof(ev) && ev.type == EV_KEY && ev.value == 0) {
-                        gettimeofday(&release_time, NULL);
-                        break;
+                } else if (ev.code == KEY_PAGEDOWN) {
+                    if (g_current_char_offset < g_processed_text_size) {
+                        if (history_top < MAX_HISTORY - 1) {
+                            history_stack[++history_top] = g_current_char_offset;
+                        }
+                        size_t next_offset = display_txt_page_from_offset(g_current_char_offset);
+                        g_current_char_offset = next_offset;
+                        printf("Next page from eye control at offset %zu\n", g_current_char_offset);
+                    } else {
+                        printf("End of book.\n");
                     }
-                    usleep(10000);
-                }
-                long press_ms = (release_time.tv_sec - press_time.tv_sec) * 1000 +
-                               (release_time.tv_usec - press_time.tv_usec) / 1000;
-
-                switch (ev.code) {
-                    case KEY_PAGEUP:  // 上一页按键
-                        if (press_ms > 1000) {
-                            // 长按：上一本书
-                            prev_book();
-                        } else {
-                            // 短按：上一页
-                            if (history_top > -1) {
-                                g_current_char_offset = history_stack[history_top--];
-                                display_txt_page_from_offset(g_current_char_offset);
-                                printf("Back to page at offset %zu\n", g_current_char_offset);
-                            } else {
-                                printf("Already at first page.\n");
-                            }
-                        }
-                        break;
-                        
-                    case KEY_PAGEDOWN:  // 下一页按键
-                        if (press_ms > 1000) {
-                            // 长按：下一本书
-                            next_book();
-                        } else {
-                            // 短按：下一页
-                            if (g_current_char_offset < g_text_size) {
-                                if (history_top < MAX_HISTORY - 1) {
-                                    history_stack[++history_top] = g_current_char_offset;
-                                }
-                                size_t next_offset = display_txt_page_from_offset(g_current_char_offset);
-                                g_current_char_offset = next_offset;
-                                printf("Next page from offset %zu\n", g_current_char_offset);
-                            } else {
-                                printf("End of book.\n");
-                            }
-                        }
-                        break;
-                        
-                    case KEY_NEXT:  // 下一本书按键 (对应头部向下移动)
-                        next_book();
-                        break;
-                        
-                    case KEY_PREVIOUS:  // 上一本书按键 (对应头部向上移动)
-                        prev_book();
-                        break;
-                        
-                    default:
-                        printf("[EYE] Unknown key code: %d\n", ev.code);
-                        break;
                 }
             }
         }
@@ -866,18 +931,16 @@ void EPD_7in5_V2_reader_txt(void) {
 #endif
 
     // 打开物理按键设备
-    key1_fd = open("/dev/input/event3", O_RDONLY | O_NONBLOCK);
-    key2_fd = open("/dev/input/event1", O_RDONLY | O_NONBLOCK);
+    key1_fd = open("/dev/input/event3", O_RDONLY);
+    key2_fd = open("/dev/input/event1", O_RDONLY);
 
     if (key1_fd < 0 || key2_fd < 0) {
         printf("Physical key devices not found\n");
         goto cleanup;
     }
 
-    // 初始化虚拟眼控设备，带重试机制
+    // 初始化并查找虚拟眼控设备
     init_eye_control_device();
-
-    // 动态查找虚拟眼控设备
     eye_key_fd = find_eye_control_device();
     if (eye_key_fd < 0) {
         printf("Warning: Failed to find eye control device, attempting to open event9 as fallback\n");
