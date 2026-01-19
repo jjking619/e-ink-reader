@@ -23,7 +23,7 @@ COOLDOWN_TIME = 1.0
 SMOOTHING_FACTOR = 0.3  # 指数平滑系数 (0-1，越小越平滑)
 
 # 初始化等待时间（防止启动时误触发）
-INITIALIZATION_PERIOD = 6.0  # 启动后等待6秒再开始响应翻页
+INITIALIZATION_PERIOD = 4.0  # 启动后等待4秒再开始响应翻页
 
 # 息屏相关参数
 SCREEN_OFF_TIMEOUT = 4.0  # 无脸检测到后多久发送息屏信号（秒）
