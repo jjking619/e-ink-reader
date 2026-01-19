@@ -481,7 +481,7 @@ size_t display_txt_page_from_offset(size_t start_offset)
             LINE_STYLE_SOLID
         );
 
-        EPD_7IN5_V2_Init();
+        EPD_7IN5_V2_Init_Fast();
         EPD_7IN5_V2_Clear();
         // 减少延时时间以加快初始化速度
         // DEV_Delay_ms(500); // 从1500ms减少到500ms

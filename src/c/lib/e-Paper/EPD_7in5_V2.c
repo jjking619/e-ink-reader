@@ -87,9 +87,9 @@ static void EPD_WaitUntilIdle(void)
 {
     Debug("e-Paper busy\r\n");
 	do{
-		DEV_Delay_ms(5);  
+		DEV_Delay_ms(2);  
 	}while(!(DEV_Digital_Read(EPD_BUSY_PIN)));   
-	DEV_Delay_ms(5);      
+	DEV_Delay_ms(2);      
     Debug("e-Paper busy release\r\n");
 }
 /******************************************************************************
@@ -99,7 +99,7 @@ parameter:
 static void EPD_7IN5_V2_TurnOnDisplay(void)
 {	
     EPD_SendCommand(0x12);			//DISPLAY REFRESH
-    DEV_Delay_ms(100);	        //!!!The delay here is necessary, 200uS at least!!!
+    DEV_Delay_ms(10);	        //!!!The delay here is necessary, 200uS at least!!!
     EPD_WaitUntilIdle();
 }
 
