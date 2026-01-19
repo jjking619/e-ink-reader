@@ -685,7 +685,7 @@ void enter_screen_off_mode() {
     }
     
     // 显示息屏画面
-    EPD_7IN5_V2_Init();
+    EPD_7IN5_V2_Init_Fast();
     EPD_7IN5_V2_Display(g_frame_buffer);
     EPD_7IN5_V2_Sleep(); // 进入休眠模式以节省电力
 }
