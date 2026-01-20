@@ -42,11 +42,12 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$SCRIPT_DIR"
 
 # 创建日志目录
-mkdir -p logs
+# mkdir -p logs
 
 # 启动Python眼动控制脚本 (后台运行)
 echo "启动Python眼动控制脚本..."
-python3 main.py > logs/python_eye_control.log 2>&1 &
+# python3 main.py > logs/python_eye_control.log 2>&1 &
+python3 main.py > /dev/null 2>&1 &
 PYTHON_PID=$!
 
 # 检查Python进程是否成功启动
@@ -57,7 +58,8 @@ fi
 
 # 启动电子墨水屏程序 (后台运行)
 echo "启动电子墨水屏程序..."
-sudo ./src/c/epd > logs/epd_program.log 2>&1 &
+# sudo ./src/c/epd > logs/epd_program.log 2>&1 &
+sudo ./src/c/epd > /dev/null 2>&1 &
 EPD_PID=$!
 
 # 检查EPD进程是否成功启动

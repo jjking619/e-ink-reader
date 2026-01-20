@@ -5,7 +5,6 @@ import time
 import numpy as np
 from evdev import UInput, ecodes
 import mediapipe as mp
-import subprocess
 
 # ======================
 # 参数区（工程关键）
@@ -14,7 +13,8 @@ FRAME_WIDTH = 640
 FRAME_HEIGHT = 480
 
 # 虹膜位置变化阈值（相对变化）
-IRIS_CHANGE_THRESHOLD = 0.004  # 虹膜位置显著变化的阈值
+IRIS_CHANGE_THRESHOLD = 0.004
+# 虹膜位置显著变化的阈值
 
 # 翻页冷却时间
 COOLDOWN_TIME = 1.0
@@ -88,7 +88,6 @@ def send_key(key):
     ui.write(ecodes.EV_KEY, key, 1)
     ui.write(ecodes.EV_KEY, key, 0)
     ui.syn()
-    print(f"[DEBUG] Sent key: {key}")
 
 # ======================
 # MediaPipe 初始化
@@ -161,11 +160,12 @@ while True:
             remaining_time = INITIALIZATION_PERIOD - (now - initialization_start_time)
             cv2.putText(frame, f"INITIALIZING... {remaining_time:.1f}s", (10, 30), 
                        cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 255), 2)
-            cv2.imshow("Eye Control - Iris Movement Detection (Improved)", frame)
             
             key = cv2.waitKey(1) & 0xFF
             if key == ord('q'):
                 break
+            # 在统一的显示部分显示画面
+            cv2.imshow("Eye Control - Iris Movement Detection", frame)
             continue
 
     # 检测是否有人脸
@@ -210,9 +210,9 @@ while True:
         cv2.putText(frame, f"Time: {current_time}", (10, FRAME_HEIGHT - 20), 
                    cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 165, 255), 1)
         
-        # 总是显示当前帧，不管人脸检测结果如何
-        cv2.imshow("Eye Control - Iris Movement Detection (Improved)", frame)
-        # cv2.waitKey(1)  # 强制刷新窗口
+        # 显示当前帧，确保画面正常刷新
+        cv2.imshow("Eye Control - Iris Movement Detection", frame)
+        cv2.waitKey(1)  # 强制刷新窗口
         continue  # 跳过下面的显示步骤
         
     else:
@@ -224,6 +224,18 @@ while True:
             screen_is_off = False
             print("[INFO] Sending screen ON signal - Face detected, attempting wake up")
             send_key(ecodes.BTN_RIGHT)  # 发送唤醒信号，使用BTN_RIGHT代替KEY_WAKEUP
+            
+            # 清空息屏期间累积的所有输入事件，防止意外翻页
+            try:
+                # 尝试读取并丢弃所有待处理的事件
+                import select
+                while select.select([ui.fd], [], [], 0) == ([ui.fd], [], []):
+                    ui.read()
+                print("[INFO] Cleared accumulated events during screen-off period")
+            except:
+                # 如果无法清空事件，忽略错误继续执行
+                pass
+                
             time.sleep(0.5)  # 短暂延迟，确保唤醒信号已被处理
         
         # 只有在屏幕未息屏时才处理眼动控制逻辑
@@ -248,23 +260,23 @@ while True:
             else:
                 smooth_iris_y = smooth_iris_y * (1 - SMOOTHING_FACTOR) + avg_iris_y * SMOOTHING_FACTOR
             
-            # 绘制眼睛中心点（绿色）
-            cv2.circle(frame, (int(left_eye_x * FRAME_WIDTH), int(left_eye_y * FRAME_HEIGHT)), 5, (0, 255, 0), -1)
-            cv2.circle(frame, (int(right_eye_x * FRAME_WIDTH), int(right_eye_y * FRAME_HEIGHT)), 5, (0, 255, 0), -1)
+            # # 绘制眼睛中心点（绿色）
+            # cv2.circle(frame, (int(left_eye_x * FRAME_WIDTH), int(left_eye_y * FRAME_HEIGHT)), 5, (0, 255, 0), -1)
+            # cv2.circle(frame, (int(right_eye_x * FRAME_WIDTH), int(right_eye_y * FRAME_HEIGHT)), 5, (0, 255, 0), -1)
             
-            # 绘制虹膜中心点（红色）
-            cv2.circle(frame, (int(left_iris_x * FRAME_WIDTH), int(left_iris_y * FRAME_HEIGHT)), 3, (0, 0, 255), -1)
-            cv2.circle(frame, (int(right_iris_x * FRAME_WIDTH), int(right_iris_y * FRAME_HEIGHT)), 3, (0, 0, 255), -1)
+            # # 绘制虹膜中心点（红色）
+            # cv2.circle(frame, (int(left_iris_x * FRAME_WIDTH), int(left_iris_y * FRAME_HEIGHT)), 3, (0, 0, 255), -1)
+            # cv2.circle(frame, (int(right_iris_x * FRAME_WIDTH), int(right_iris_y * FRAME_HEIGHT)), 3, (0, 0, 255), -1)
             
-            # 绘制眼睛到虹膜的连线
-            cv2.line(frame, 
-                    (int(left_eye_x * FRAME_WIDTH), int(left_eye_y * FRAME_HEIGHT)),
-                    (int(left_iris_x * FRAME_WIDTH), int(left_iris_y * FRAME_HEIGHT)),
-                    (255, 255, 0), 1)
-            cv2.line(frame, 
-                    (int(right_eye_x * FRAME_WIDTH), int(right_eye_y * FRAME_HEIGHT)),
-                    (int(right_iris_x * FRAME_WIDTH), int(right_iris_y * FRAME_HEIGHT)),
-                    (255, 255, 0), 1)
+            # # 绘制眼睛到虹膜的连线
+            # cv2.line(frame, 
+            #         (int(left_eye_x * FRAME_WIDTH), int(left_eye_y * FRAME_HEIGHT)),
+            #         (int(left_iris_x * FRAME_WIDTH), int(left_iris_y * FRAME_HEIGHT)),
+            #         (255, 255, 0), 1)
+            # cv2.line(frame, 
+            #         (int(right_eye_x * FRAME_WIDTH), int(right_eye_y * FRAME_HEIGHT)),
+            #         (int(right_iris_x * FRAME_WIDTH), int(right_iris_y * FRAME_HEIGHT)),
+            #         (255, 255, 0), 1)
             
             # 初始化参考位置（当头部稳定时）
             if reference_iris_y is None:
@@ -327,23 +339,23 @@ while True:
             cv2.putText(frame, f"Status: {status}", (10, 30), 
                        cv2.FONT_HERSHEY_SIMPLEX, 0.7, status_color, 2)
             
-            # 显示虹膜位置信息
-            cv2.putText(frame, f"Smooth Iris Y: {smooth_iris_y:.4f}", (10, 90), 
-                       cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 255), 2)
-            cv2.putText(frame, f"Relative Change: {relative_change:.4f}", (10, 120), 
-                       cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 255), 2)
+            # 只在调试模式下显示虹膜位置信息，减少绘制操作
+            # cv2.putText(frame, f"Smooth Iris Y: {smooth_iris_y:.4f}", (10, 90), 
+            #            cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 255), 2)
+            # cv2.putText(frame, f"Relative Change: {relative_change:.4f}", (10, 120), 
+            #            cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 255), 2)
             
             # 显示阈值
-            cv2.putText(frame, f"Threshold: +/-{IRIS_CHANGE_THRESHOLD:.4f}", (10, 180), 
-                       cv2.FONT_HERSHEY_SIMPLEX, 0.5, (100, 100, 255), 1)
+            # cv2.putText(frame, f"Threshold: +/-{IRIS_CHANGE_THRESHOLD:.4f}", (10, 180), 
+            #            cv2.FONT_HERSHEY_SIMPLEX, 0.5, (100, 100, 255), 1)
             
             # 显示缓冲区状态
-            buffer_str = "Buffer: " + " ".join(eye_movement_buffer)
-            cv2.putText(frame, buffer_str, (10, 210), 
-                       cv2.FONT_HERSHEY_SIMPLEX, 0.5, (200, 200, 200), 1)
+            # buffer_str = "Buffer: " + " ".join(eye_movement_buffer)
+            # cv2.putText(frame, buffer_str, (10, 210), 
+            #            cv2.FONT_HERSHEY_SIMPLEX, 0.5, (200, 200, 200), 1)
         
         else:
-            # 屏幕息屏状态下，仍然显示摄像头画面而不是黑屏
+            # 屏幕息屏状态下，仍然显示摄像头画面而不是黑屏，只更新提示文字
             cv2.putText(frame, "Screen Off - Waiting for face detection", 
                        (int(FRAME_WIDTH/2)-200, int(FRAME_HEIGHT/2)-30), 
                        cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 0, 255), 2)
@@ -356,13 +368,12 @@ while True:
             cv2.putText(frame, f"Time: {current_time}", (10, FRAME_HEIGHT - 20), 
                        cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 165, 255), 1)
             
-            cv2.imshow("Eye Control - Iris Movement Detection (Improved)", frame)
-            # cv2.waitKey(1)  # 强制刷新窗口
+            cv2.imshow("Eye Control - Iris Movement Detection", frame)
+            cv2.waitKey(1)  # 强制刷新窗口
             continue  # 跳过下面的显示步骤
-
-    # 调试窗口 - 这个是最后的保障，确保无论如何都会显示画面
-    cv2.imshow("Eye Control - Iris Movement Detection (Improved)", frame)
     
+    # 统一显示部分
+    cv2.imshow("Eye Control - Iris Movement Detection", frame)
     # 已移除键盘输入处理逻辑（不再响应 'q' 退出或 'r' 重置）
     cv2.waitKey(1)
 
