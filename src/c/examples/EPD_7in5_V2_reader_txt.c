@@ -24,7 +24,7 @@
 #define CUSTOM_SCREEN_OFF_BTN BTN_LEFT
 #define CUSTOM_SCREEN_ON_BTN BTN_RIGHT
 
-#define BOOK_PATH "/home/pi/ebook-reader/src/tools/books"
+#define BOOK_PATH "./src/tools/books"
 #define MAX_BOOK_SIZE (4* 1024 * 1024) // 4MB
 #define MAX_BOOKS 20
 #define MAX_HISTORY 500 // 最多记录500页历史
@@ -677,7 +677,7 @@ void enter_screen_off_mode() {
     Paint_Clear(WHITE);
     
     // 显示息屏图片，使用GUI_ReadBmp函数
-    GUI_ReadBmp("/home/pi/ebook-reader/src/c/pic/2.bmp", 0, 0) ;
+    GUI_ReadBmp("./src/c/pic/2.bmp", 0, 0) ;
     
     // 显示息屏画面
     EPD_7IN5_V2_Init_Fast();
