@@ -1,5 +1,6 @@
+EPD_7in5_V2_reader_txt.c
 // examples/EPD_7in5_V2_reader_txt.c
-#define _DEFAULT_SOURCE  // 必须在包含头文件前定义，以启用DT_REG等文件类型常量
+#define _DEFAULT_SOURCE  // Must be defined before including header files to enable file type constants like DT_REG
 #include "EPD_7in5_V2.h"
 #include "GUI_Paint.h"
 #include "fonts.h"
@@ -17,66 +18,66 @@
 #include <lgpio.h>
 #include <sys/ioctl.h>
 #include "DEV_Config.h"
-#include <sys/types.h>  // 添加此头文件以定义DT_REG
+#include <sys/types.h>  // Add this header to define DT_REG
 #include <poll.h>
 
-// 定义自定义的息屏和唤醒信号
+// Define custom screen off and on signals
 #define CUSTOM_SCREEN_OFF_BTN BTN_LEFT
 #define CUSTOM_SCREEN_ON_BTN BTN_RIGHT
 
 #define BOOK_PATH "./src/tools/books"
 #define MAX_BOOK_SIZE (4* 1024 * 1024) // 4MB
 #define MAX_BOOKS 20
-#define MAX_HISTORY 500 // 最多记录500页历史
+#define MAX_HISTORY 500 // Record up to 500 page history entries
 
-// 局部刷新区域定义
+// Partial refresh area definitions
 #define HEADER_HEIGHT   30
-#define FOOTER_HEIGHT   30  // 增加页脚高度，为页码下移预留空间
+#define FOOTER_HEIGHT   30  // Increase footer height to provide space for page numbers
 
 #define CONTENT_Y_START   (HEADER_HEIGHT + 8)
 #define FOOTER_Y_START    (EPD_7IN5_V2_HEIGHT - FOOTER_HEIGHT)
 
-// 息屏相关定义
-static int screen_off = 0;  // 是否处于息屏状态
+// Screen-off related definitions
+static int screen_off = 0;  // Whether currently in screen-off state
 
 static char current_file[256] = {0};
 static UBYTE *g_frame_buffer = NULL;
-static UBYTE *g_prev_frame_buffer = NULL; // 用于比较前后两帧差异，实现真正意义上的局部刷新
+static UBYTE *g_prev_frame_buffer = NULL; // Used to compare differences between frames for implementing partial refresh
 static int key1_fd = -1; // event3: next page / long press: next book
 static int key2_fd = -1; // event1: prev page / long press: prev book
-static int eye_key_fd = -1; // 新增: eye_page_turner 虚拟设备
+static int eye_key_fd = -1; // New: eye_page_turner virtual device
 static int first_display_done = 0;
-static int book_changed = 0;  // 标记书籍是否已切换
-static int header_drawn = 0;  // 新增: 标记Header区是否已绘制
+static int book_changed = 0;  // Flag to mark whether book has changed
+static int header_drawn = 0;  // New: flag to mark if Header area has been drawn
 
-// 多书支持
+// Multi-book support
 static char book_list[MAX_BOOKS][256];
 static int book_count = 0;
 static int current_book_index = 0;
 
-// 全局文本
+// Global text
 static char* g_full_text = NULL;
 static size_t g_text_size = 0;
-// 新增：处理后的纯文本内容，去除多余换行
+// New: Processed plain text content with extra line breaks removed
 static char* g_processed_text = NULL;
 static size_t g_processed_text_size = 0;
 
-// 当前页起始偏移（字节）
+// Current page starting offset (in bytes)
 static size_t g_current_char_offset = 0;
 
-// 历史栈：记录每一页的起始偏移（用于精确回退）
+// History stack: record starting offset of each page (for precise backward navigation)
 static size_t history_stack[MAX_HISTORY];
 static int history_top = -1;
 
-// 标记是否需要重绘书名
+// Flag to mark if book title needs redrawing
 static int title_drawn = 0;
 
-// 新增：用于准确计算当前页数
-static size_t *page_offsets = NULL;  // 存储每一页的起始偏移
-static int total_pages = 0;          // 总页数
-static int current_page_index = 0;   // 当前页索引（从0开始）
+// New: Used for accurate calculation of current page number
+static size_t *page_offsets = NULL;  // Store starting offset of each page
+static int total_pages = 0;          // Total number of pages
+static int current_page_index = 0;   // Current page index (starting from 0)
 
-// 函数声明
+// Function declarations
 char* process_text_content(const char* raw_text, size_t raw_size);
 void calculate_page_info();
 int get_current_page_index(size_t offset);
@@ -90,19 +91,19 @@ const char* get_ext(const char* filename) {
     return (dot && dot != filename) ? dot + 1 : "";
 }
 
-// 函数：查找名为eye_page_turner的输入设备
+// Function: Find input device named eye_page_turner
 int find_eye_control_device() {
     char name[256] = {0};
     int fd;
     int i;
-    char fname[64];  // 设备文件名模板
+    char fname[64];  // Device file name template
     
-    // 遍历/dev/input/event*设备
+    // Iterate through /dev/input/event* devices
     for (i = 0; i < 32; i++) {
         sprintf(fname, "/dev/input/event%d", i);
         fd = open(fname, O_RDONLY | O_NONBLOCK);
         if (fd >= 0) {
-            // 读取设备名称
+            // Read device name
             ioctl(fd, EVIOCGNAME(sizeof(name) - 1), name);
             if (strstr(name, "eye_page_turner")) {
                 printf("Found eye control device: %s (%s)\n", fname, name);
@@ -114,10 +115,10 @@ int find_eye_control_device() {
     return -1;
 }
 
-// 初始化虚拟设备，带重试机制
+// Initialize virtual device with retry mechanism
 void init_eye_control_device() {
     int attempts = 0;
-    const int max_attempts = 10; // 尝试10次，每次间隔1秒
+    const int max_attempts = 10; // Try 10 times with 1 second intervals
     
     printf("Waiting for eye control device...\n");
     
@@ -129,34 +130,34 @@ void init_eye_control_device() {
         }
         
         printf("Attempt %d/%d: Eye control device not found, waiting...\n", attempts+1, max_attempts);
-        sleep(1); // 等待1秒后重试
+        sleep(1); // Wait for 1 second before retrying
         attempts++;
     }
     
     printf("Warning: Failed to connect to eye control device after %d attempts\n", max_attempts);
 }
 
-// 处理文本内容：合并段落，去除多余换行
+// Process text content: merge paragraphs, remove extra line breaks
 char* process_text_content(const char* raw_text, size_t raw_size) {
     if (!raw_text || raw_size == 0) return NULL;
 
-    // 创建临时缓冲区存储处理后的文本
-    char* processed = malloc(raw_size + 1);  // 初始化为原大小，可能会略大一些
+    // Create temporary buffer to store processed text
+    char* processed = malloc(raw_size + 1);  // Initialize to original size, may be slightly larger
     if (!processed) return NULL;
 
     size_t src_idx = 0, dst_idx = 0;
-    int in_paragraph = 0;  // 标记是否在段落中间
+    int in_paragraph = 0;  // Flag to mark if in middle of paragraph
 
     while (src_idx < raw_size) {
-        // 跳过连续的换行符和空白字符
+        // Skip consecutive newlines and whitespace characters
         while (src_idx < raw_size && (raw_text[src_idx] == '\n' || raw_text[src_idx] == '\r')) {
-            // 检查是否是段落分隔（连续两个换行符）
+            // Check if it's a paragraph separator (two consecutive newlines)
             size_t temp_idx = src_idx;
             int newline_count = 0;
             while (temp_idx < raw_size && (raw_text[temp_idx] == '\n' || raw_text[temp_idx] == '\r')) {
                 if (raw_text[temp_idx] == '\n' || raw_text[temp_idx] == '\r') {
                     newline_count++;
-                    // 跳过\r\n或\n\r序列
+                    // Skip \r\n or \n\r sequences
                     if (temp_idx+1 < raw_size && 
                         ((raw_text[temp_idx]=='\r' && raw_text[temp_idx+1]=='\n') ||
                          (raw_text[temp_idx]=='\n' && raw_text[temp_idx+1]=='\r'))) {
@@ -167,42 +168,42 @@ char* process_text_content(const char* raw_text, size_t raw_size) {
                 }
             }
             
-            // 如果是段落分隔（至少两个换行），则添加一个换行表示段落结束
+            // If it's a paragraph separator (at least two newlines), add a newline to mark end of paragraph
             if (newline_count >= 2) {
                 if (in_paragraph) {
-                    processed[dst_idx++] = '\n';  // 段落结束标记
+                    processed[dst_idx++] = '\n';  // Paragraph end marker
                     in_paragraph = 0;
                 }
             } else if (in_paragraph) {
-                // 行与行之间的换行替换为空格
+                // Replace line breaks between lines with spaces
                 processed[dst_idx++] = ' ';
             }
             
             src_idx = temp_idx;
         }
 
-        // 处理普通字符
+        // Process regular characters
         if (src_idx < raw_size && raw_text[src_idx] != '\n' && raw_text[src_idx] != '\r') {
-            // 跳过开头的空白字符（如果不在段落中）
+            // Skip leading whitespace characters (if not in paragraph)
             if (!in_paragraph) {
                 while (src_idx < raw_size && raw_text[src_idx] == ' ') src_idx++;
                 if (src_idx >= raw_size) break;
             }
 
-            // 复制字符
+            // Copy characters
             unsigned char c = (unsigned char)raw_text[src_idx];
             int bytes = 1;
-            // 检测中文字符（高位字节大于0x80）
+            // Detect Chinese characters (high byte greater than 0x80)
             if (c > 0x80 && src_idx + 1 < raw_size) {
-                // 检查下一个字节是否是有效的低位字节
+                // Check if next byte is a valid low byte
                 if ((unsigned char)raw_text[src_idx+1] > 0x40) {
                     bytes = 2;
                 }
             }
 
-            // 复制字符（跳过段落内的多余空格）
+            // Copy character (skip extra spaces within paragraph)
             if (c == ' ' && in_paragraph && dst_idx > 0 && processed[dst_idx-1] == ' ') {
-                // 跳过多余的空格
+                // Skip extra spaces
             } else {
                 for (int i = 0; i < bytes && src_idx+i < raw_size; i++) {
                     processed[dst_idx++] = raw_text[src_idx + i];
@@ -215,23 +216,23 @@ char* process_text_content(const char* raw_text, size_t raw_size) {
     }
 
     processed[dst_idx] = '\0';
-    // 重新分配合适大小的内存
+    // Reallocate to appropriate size
     char* result = realloc(processed, dst_idx + 1);
-    if (!result) result = processed;  // 如果realloc失败，返回原来的指针
+    if (!result) result = processed;  // If realloc fails, return original pointer
     return result;
 }
 
-// 计算总页数并存储每页的起始偏移
+// Calculate total number of pages and store starting offset of each page
 void calculate_page_info() {
     if (!g_processed_text) return;
     
-    // 释放之前的页偏移数组
+    // Free previous page offset array
     if (page_offsets) {
         free(page_offsets);
         page_offsets = NULL;
     }
     
-    // 临时存储页偏移，使用较大缓冲区
+    // Temporary storage for page offsets, using larger buffer
     size_t *temp_offsets = malloc(sizeof(size_t) * (g_processed_text_size / 1000 + 100));
     if (!temp_offsets) {
         printf("Error: Could not allocate memory for temporary page offsets\n");
@@ -241,10 +242,10 @@ void calculate_page_info() {
     int count = 0;
     size_t offset = 0;
     
-    // 循环计算每一页的起始偏移
+    // Loop to calculate starting offset of each page
     while (offset < g_processed_text_size) {
         if(count >= (g_processed_text_size / 1000 + 100)) {
-            // 如果数组容量不够，重新分配更大的空间
+            // If array capacity is insufficient, reallocate larger space
             size_t *new_temp_offsets = realloc(temp_offsets, sizeof(size_t) * (count + 1000));
             if(new_temp_offsets) {
                 temp_offsets = new_temp_offsets;
@@ -256,7 +257,7 @@ void calculate_page_info() {
         
         temp_offsets[count++] = offset;
         
-        // 使用相同的显示逻辑计算一页能容纳多少字符
+        // Use same display logic to calculate how many characters fit on one page
         const int left_margin = 10;
         const int right_margin = 10;
         const int max_x = EPD_7IN5_V2_WIDTH - right_margin;
@@ -267,26 +268,26 @@ void calculate_page_info() {
         int y = CONTENT_Y_START+HEADER_HEIGHT +10 ;
         const int text_bottom = FOOTER_Y_START - 10;
         
-        // 计算一页的内容
-        int page_has_content = 0; // 标记这一页是否有内容
+        // Calculate content for one page
+        int page_has_content = 0; // Flag to mark if this page has content
         
         while (offset < g_processed_text_size && y < text_bottom) {
             int x = left_margin;
             int has_cn = 0;
 
-            // 构建一行文本，直到达到最大宽度或遇到段落结束标记
+            // Build a line of text until reaching maximum width or encountering paragraph end marker
             while (offset < g_processed_text_size) {
                 unsigned char c = (unsigned char)g_processed_text[offset];
-                // 遇到段落结束标记，换行
+                // Encounter paragraph end marker, move to next line
                 if (c == '\n') {
-                    offset++;  // 跳过段落结束标记
-                    // 段落后第一行需要缩进，所以将x设置为缩进距离
-                    x = left_margin + (Font16.Width * 30);  // 缩进30个字符的宽度
-                    continue;  // 继续下一次循环
+                    offset++;  // Skip paragraph end marker
+                    // First line after paragraph needs indent, so set x to indent distance
+                    x = left_margin + (Font16.Width * 30);  // Indent 30 character widths
+                    continue;  // Continue to next iteration
                 }
 
                 int bytes = 1;
-                // 检测中文字符（高位字节大于0x80）
+                // Detect Chinese characters (high byte greater than 0x80)
                 if (c > 0x80 && offset + 1 < g_processed_text_size) {
                     if ((unsigned char)g_processed_text[offset+1] > 0x40) {
                         bytes = 2;
@@ -296,14 +297,14 @@ void calculate_page_info() {
                 int width = (bytes == 2) ? Font12CN.Width : Font16.Width;
 
                 if (x + width > max_x)
-                    break;  // 达到行宽限制，换行
+                    break;  // Reached line width limit, move to next line
 
                 if (bytes == 2) has_cn = 1;
                 offset += bytes;
                 x += width;
             }
 
-            page_has_content = 1; // 至少有一行内容
+            page_has_content = 1; // At least one line of content
                 
             int lh = has_cn ? lh_cn : lh_en;
             if (y + lh > text_bottom)
@@ -312,14 +313,14 @@ void calculate_page_info() {
             y += lh;
         }
         
-        // 如果这一页没有内容但是还有剩余文本，说明文本超出了页面空间
+        // If this page has no content but there's still remaining text, the text exceeds page space
         if(!page_has_content && offset < g_processed_text_size) {
             printf("Warning: No content placed on page %d but text remains\n", count);
             break;
         }
     }
     
-    // 分配确切大小的页偏移数组
+    // Allocate exact size page offset array
     total_pages = count;
     page_offsets = malloc(sizeof(size_t) * total_pages);
     if (page_offsets) {
@@ -332,14 +333,14 @@ void calculate_page_info() {
     free(temp_offsets);
 }
 
-// 获取当前页索引
+// Get current page index
 int get_current_page_index(size_t offset) {
     if (!page_offsets || total_pages == 0) {
-        // 如果无法获取准确页数，使用估算方式
+        // If unable to get accurate page count, use estimation method
         return (offset / 2000) + 1;
     }
     
-    // 二分查找当前偏移量所属的页
+    // Binary search for page containing current offset
     int left = 0, right = total_pages - 1;
     int result = 0;
     
@@ -350,21 +351,21 @@ int get_current_page_index(size_t offset) {
             if (mid < total_pages - 1) {
                 left = mid + 1;
             } else {
-                break;  // 已经是最后一页
+                break;  // Already at last page
             }
         } else {
             if (mid > 0) {
                 right = mid - 1;
             } else {
-                break;  // 已经是第一页
+                break;  // Already at first page
             }
         }
     }
     
-    return result + 1; // 页码从1开始
+    return result + 1; // Page numbers start from 1
 }
 
-// 加载整个 TXT 文件到内存（GB2312 编码）
+// Load entire TXT file to memory (GB2312 encoding)
 int load_txt_file(const char* path) {
     FILE* fp = fopen(path, "rb");
     if (!fp) {
@@ -400,7 +401,7 @@ int load_txt_file(const char* path) {
     g_full_text[read_bytes] = '\0';
     g_text_size = read_bytes;
 
-    // 处理文本：去除多余的换行符，合并段落
+    // Process text: remove extra line breaks, merge paragraphs
     if (g_processed_text) free(g_processed_text);
     g_processed_text = process_text_content(g_full_text, g_text_size);
     if (!g_processed_text) {
@@ -409,14 +410,14 @@ int load_txt_file(const char* path) {
     }
     g_processed_text_size = strlen(g_processed_text);
 
-    // 重置状态
+    // Reset status
     g_current_char_offset = 0;
-    history_top = -1; // 清空历史
+    history_top = -1; // Clear history
     first_display_done = 0;
     
-    // 计算页信息
+    // Calculate page info
     calculate_page_info();
-    current_page_index = 1;  // 重置为第一页
+    current_page_index = 1;  // Reset to first page
 
     printf("Loaded %zu bytes from %s, processed to %zu bytes\n", g_text_size, path, g_processed_text_size);
     return 0;
@@ -433,10 +434,10 @@ void show_error(const char* msg) {
     sleep(3);
 }
 
-// 核心：从指定偏移绘制一页，并返回下一页起始偏移
+// Core: Draw one page from specified offset and return starting offset of next page
 size_t display_txt_page_from_offset(size_t start_offset)
 {
-    // 使用处理后的文本而不是原始文本
+    // Use processed text instead of original text
     if (!g_processed_text || start_offset >= g_processed_text_size) {
         Paint_SelectImage(g_frame_buffer);
         Paint_Clear(WHITE);
@@ -447,22 +448,22 @@ size_t display_txt_page_from_offset(size_t start_offset)
     Paint_SelectImage(g_frame_buffer);
 
     /* =====================================================
-     * 1. 首次显示或书籍切换：全屏初始化
+     * 1. First display or book switch: Full screen initialization
      * ===================================================== */
     if (!first_display_done || book_changed) {
         Paint_Clear(WHITE);
 
-        /* Header —— 永久区 */
+        /* Header —— Permanent area */
         char title[256];
         const char* name = strrchr(current_file, '/');
         name = name ? name + 1 : current_file;
 
-        // 创建副本并去掉后缀
+        // Create copy and remove extension
         char display_name[256];
         strncpy(display_name, name, sizeof(display_name)-1);
         display_name[sizeof(display_name)-1] = 0;
 
-        // 查找最后一个点
+        // Find last period
         char *dot = strrchr(display_name, '.');
         if (dot && dot != display_name) {
             *dot = 0;
@@ -483,20 +484,20 @@ size_t display_txt_page_from_offset(size_t start_offset)
 
         EPD_7IN5_V2_Init_Fast();
         EPD_7IN5_V2_Clear();
-        // 减少延时时间以加快初始化速度
-        // DEV_Delay_ms(500); // 从1500ms减少到500ms
+        // Reduce delay time to speed up initialization
+        // DEV_Delay_ms(500); // Reduced from 1500ms to 500ms
         EPD_7IN5_V2_Display(g_frame_buffer);
-        // 减少延时时间以加快初始化速度
-        // DEV_Delay_ms(200); // 从500ms减少到200ms
+        // Reduce delay time to speed up initialization
+        // DEV_Delay_ms(200); // Reduced from 500ms to 200ms
         EPD_7IN5_V2_Init_Part();
 
         first_display_done = 1;
         book_changed = 0;
-        header_drawn = 1;  // 标记Header已绘制
+        header_drawn = 1;  // Mark header as drawn
     }
     else if (!header_drawn) {
         /* =================================================
-         * 2. 确保Header区始终存在（即使局部刷新后）
+         * 2. Ensure Header area always exists (even after partial refresh)
          * ===================================================== */
         char title[256];
         const char* name = strrchr(current_file, '/');
@@ -519,7 +520,7 @@ size_t display_txt_page_from_offset(size_t start_offset)
     }
     else {
         /* =================================================
-         * 3. 翻页：仅清 CONTENT + FOOTER（不碰 Header）
+         * 3. Page turning: Only clear CONTENT + FOOTER (not Header)
          * ================================================= */
         Paint_ClearWindows(
             0,
@@ -531,7 +532,7 @@ size_t display_txt_page_from_offset(size_t start_offset)
     }
 
     /* =====================================================
-     * 4. 正文排版绘制
+     * 4. Text layout drawing
      * ===================================================== */
     const int left_margin = 0;
     // const int right_margin = 0;
@@ -543,10 +544,10 @@ size_t display_txt_page_from_offset(size_t start_offset)
     int y = CONTENT_Y_START+HEADER_HEIGHT +10 ;
     const int text_bottom = FOOTER_Y_START ;
 
-    // 使用处理后的文本
+    // Use processed text
     size_t i = start_offset;
 
-    // 记录进入循环前的起始位置
+    // Record starting position before entering loop
     size_t initial_i = i;
 
     while (i < g_processed_text_size && y < text_bottom) {
@@ -555,25 +556,25 @@ size_t display_txt_page_from_offset(size_t start_offset)
         int len = 0;
         int has_cn = 0;
 
-        // 构建一行文本，直到达到最大宽度或遇到段落结束标记
+        // Build a line of text until reaching maximum width or encountering paragraph end marker
         while (i < g_processed_text_size) {
             unsigned char c = (unsigned char)g_processed_text[i];
-            // 遇到段落结束标记，换行
+            // Encounter paragraph end marker, move to next line
             if (c == '\n') {
-                i++;  // 跳过段落结束标记
-                // 段落后第一行需要缩进，所以将x设置为缩进距离
-                x = left_margin + (Font16.Width * 2);  // 缩进两个字符的宽度
-                continue;  // 继续下一次循环
+                i++;  // Skip paragraph end marker
+                // First line after paragraph needs indent, so set x to indent distance
+                x = left_margin + (Font16.Width * 2);  // Indent two character widths
+                continue;  // Continue to next iteration
             }
 
             int bytes = 1;
-            // 检测中文字符（高位字节大于0x80）
+            // Detect Chinese characters (high byte greater than 0x80)
             if (c > 0x80 && i + 1 < g_processed_text_size) {
                 if ((unsigned char)g_processed_text[i+1] > 0x40) {
                     bytes = 2;
                 }
             } else if (c > 0x80 && i + 2 < g_processed_text_size) {
-                // 检查是否是三字节UTF-8字符（中文字符）
+                // Check if this is a three-byte UTF-8 character (Chinese character)
                 if (((unsigned char)g_processed_text[i] & 0xE0) == 0xE0) {
                     bytes = 3;
                 }
@@ -581,10 +582,10 @@ size_t display_txt_page_from_offset(size_t start_offset)
 
             int width = (bytes == 1) ? Font16.Width : 
                        (bytes == 2) ? Font12CN.Width : 
-                       Font12CN.Width; // 三字节UTF-8字符也按中文字符宽度处理
+                       Font12CN.Width; // Treat three-byte UTF-8 characters as Chinese character width
 
             if (x + width > max_x)
-                break;  // 达到行宽限制，换行
+                break;  // Reached line width limit, move to next line
 
             for (int k = 0; k < bytes && i + k < g_processed_text_size; k++)
                 line[len++] = g_processed_text[i + k];
@@ -608,24 +609,24 @@ size_t display_txt_page_from_offset(size_t start_offset)
             y += lh;
         }
         
-        // 如果在循环中没有进展（即i没有增加），则跳出以防止无限循环
+        // If no progress was made in the loop (i did not increase), break to prevent infinite loop
         if (i == initial_i && i < g_processed_text_size) {
-            // 跳过一个字符以防止无限循环
+            // Skip one character to prevent infinite loop
             unsigned char c = (unsigned char)g_processed_text[i];
             if (c > 0x80 && i + 1 < g_processed_text_size) {
                 if ((unsigned char)g_processed_text[i+1] > 0x40) {
-                    i += 2;  // 跳过双字节字符
+                    i += 2;  // Skip double-byte character
                 } else {
-                    i += 1;  // 跳过单个字节
+                    i += 1;  // Skip single byte
                 }
             } else {
-                i += 1;  // 跳过单个字节
+                i += 1;  // Skip single byte
             }
         }
     }
 
     /* =====================================================
-     * 5. Footer：页码（使用准确的页数计算）
+     * 5. Footer: Page number (using accurate page count calculation)
      * ===================================================== */
     Paint_ClearWindows(
         0,
@@ -635,7 +636,7 @@ size_t display_txt_page_from_offset(size_t start_offset)
         WHITE
     );
 
-    // 使用准确的页数计算
+    // Use accurate page count calculation
     int cur_page = get_current_page_index(start_offset);
     int total_pages_calc = total_pages > 0 ? total_pages : (g_processed_text_size / 2000) + 1;
 
@@ -644,7 +645,7 @@ size_t display_txt_page_from_offset(size_t start_offset)
 
     Paint_DrawString_EN(
         EPD_7IN5_V2_WIDTH - 160,
-        FOOTER_Y_START + 10,  // 页码下移10像素
+        FOOTER_Y_START + 10,  // Move page number down 10 pixels
         page,
         &Font16,
         BLACK,
@@ -652,7 +653,7 @@ size_t display_txt_page_from_offset(size_t start_offset)
     );
 
     /* =====================================================
-     * 6. 局部刷新（仅 CONTENT + FOOTER）
+     * 6. Partial refresh (CONTENT + FOOTER only)
      * ===================================================== */
     EPD_7IN5_V2_Display_Part(
         g_frame_buffer,
@@ -662,63 +663,63 @@ size_t display_txt_page_from_offset(size_t start_offset)
         EPD_7IN5_V2_HEIGHT - CONTENT_Y_START
     );
 
-    return i;  // 返回实际结束的偏移量
+    return i;  // Return actual ending offset
 }
 
-// 进入息屏模式
+// Enter screen-off mode
 void enter_screen_off_mode() {
-    if (screen_off) return; // 如果已经在息屏状态，直接返回
+    if (screen_off) return; // If already in screen-off state, return directly
 
     printf("Entering screen off mode...\n");
     screen_off = 1;
 
-    // 创建息屏画面
+    // Create screen-off image
     Paint_SelectImage(g_frame_buffer);
     Paint_Clear(WHITE);
     
-    // 显示息屏图片，使用GUI_ReadBmp函数
+    // Display screen-off image using GUI_ReadBmp function
     GUI_ReadBmp("./src/c/pic/2.bmp", 0, 0) ;
     
-    // 显示息屏画面
+    // Display screen-off image
     EPD_7IN5_V2_Init_Fast();
     EPD_7IN5_V2_Display(g_frame_buffer);
-    EPD_7IN5_V2_Sleep(); // 进入休眠模式以节省电力
+    EPD_7IN5_V2_Sleep(); // Enter sleep mode to save power
 }
 
-// 退出息屏模式
+// Exit screen-off mode
 void exit_screen_off_mode() {
-    if (!screen_off) return; // 如果不在息屏状态，直接返回
+    if (!screen_off) return; // If not in screen-off state, return directly
 
     printf("Exiting screen off mode...\n");
     screen_off = 0;
 
-    // 重新初始化EPD
+    // Reinitialize EPD
     // EPD_7IN5_V2_Init();
     // EPD_7IN5_V2_Clear();
     // EPD_7IN5_V2_Init_Part();
 
-    // 设置first_display_done为0，book_changed为0，确保Header区域会被重新绘制
+    // Set first_display_done to 0, book_changed to 0 to ensure Header area gets redrawn
     first_display_done = 0;
     book_changed = 0;
     header_drawn = 0;
 
-    // 重新显示当前页面，这会重新绘制整个界面
+    // Redisplay current page, this will redraw entire interface
     display_txt_page_from_offset(g_current_char_offset);
     
-    // 息屏期间可能累积了一些输入事件，这里读取并丢弃它们，避免误操作
+    // During screen-off, accumulated input events may exist, read and discard them to avoid misoperation
     struct input_event ev;
     if (eye_key_fd >= 0) {
-        // 清空眼控设备中积压的事件
+        // Clear accumulated events from eye control device
         while (read(eye_key_fd, &ev, sizeof(ev)) == sizeof(ev)) {
-            // 循环读取直到没有更多事件
+            // Loop until no more events
         }
     }
     
-    // 添加短暂延迟，确保系统有时间处理上述事件
-    usleep(100000); // 100ms延迟
+    // Add brief delay to allow system to process events
+    usleep(100000); // 100ms delay
 }
 
-// 切换到下一本书
+// Switch to next book
 void next_book() {
     if (book_count > 1) {
         current_book_index = (current_book_index + 1) % book_count;
@@ -726,20 +727,20 @@ void next_book() {
         if (load_txt_file(current_file) == 0) {
             g_current_char_offset = 0;
             display_txt_page_from_offset(0);
-            // 新书开始，清空历史，压入第一页
+            // Start of new book, clear history, push first page
             history_top = -1;
             if (history_top < MAX_HISTORY - 1) {
                 history_stack[++history_top] = 0;
             }
-            // 重置书名标记，以便在切换到新书时重新绘制书名
+            // Reset title flag to redraw title when switching to new book
             title_drawn = 0;
-            current_page_index = 1;  // 重置为第一页
+            current_page_index = 1;  // Reset to first page
             printf("Switched to book [%d]: %s\n", current_book_index, current_file);
         }
     }
 }
 
-// 切换到上一本书
+// Switch to previous book
 void prev_book() {
     if (book_count > 1) {
         current_book_index = (current_book_index - 1 + book_count) % book_count;
@@ -747,36 +748,36 @@ void prev_book() {
         if (load_txt_file(current_file) == 0) {
             g_current_char_offset = 0;
             display_txt_page_from_offset(0);
-            // 新书开始，清空历史，压入第一页
+            // Start of new book, clear history, push first page
             history_top = -1;
             if (history_top < MAX_HISTORY - 1) {
                 history_stack[++history_top] = 0;
             }
-            // 重置书名标记，以便在切换到新书时重新绘制书名
+            // Reset title flag to redraw title when switching to new book
             title_drawn = 0;
-            current_page_index = 1;  // 重置为第一页
+            current_page_index = 1;  // Reset to first page
             printf("Switched to book [%d]: %s\n", current_book_index, current_file);
         }
     }
 }
 
-// 新增：按键状态跟踪结构体
+// New: Key state tracking structure
 typedef struct {
     struct timeval press_time;
     int pressed;
     int key_id;
 } KeyState;
 
-static KeyState key_states[3] = {0}; // 索引0未使用，1=KEY1, 2=KEY2
+static KeyState key_states[3] = {0}; // Index 0 unused, 1=KEY1, 2=KEY2
 
-// 新增：按键事件处理函数
+// New: Key event handling function
 void handle_key_event(int key_id, struct input_event *ev) {
     if (ev->type != EV_KEY) return;
 
-    // 新增：打印实际接收到的按键码，便于调试
+    // New: Print actual received key codes for debugging
     printf("Received key event: id=%d, code=%d, value=%d\n", key_id, ev->code, ev->value);
 
-    // 检查是否是支持的按键码
+    // Check if this is a supported key code
     if (key_id == 1) {
         if (!(ev->code == KEY_PAGEDOWN || 
               ev->code == BTN_LEFT || 
@@ -784,14 +785,14 @@ void handle_key_event(int key_id, struct input_event *ev) {
               ev->code == BTN_MIDDLE || 
               ev->code == KEY_NEXTSONG ||
               ev->code == BTN_EXTRA ||
-              ev->code == KEY_VOLUMEDOWN)) {  // 添加实际使用的按键码
+              ev->code == KEY_VOLUMEDOWN)) {  // Add actually used key codes
             printf("Key1: Ignoring code %d\n", ev->code);
             return;
         }
     } else if (key_id == 2) {
         if (!(ev->code == KEY_PAGEUP || 
               ev->code == BTN_BASE ||
-              ev->code == KEY_VOLUMEUP)) {  // 添加实际使用的按键码
+              ev->code == KEY_VOLUMEUP)) {  // Add actually used key codes
             printf("Key2: Ignoring code %d\n", ev->code);
             return;
         }
@@ -839,18 +840,18 @@ void handle_key_event(int key_id, struct input_event *ev) {
     }
 }
 
-// 修改：使用poll机制处理按键事件
+// Modify: Use poll mechanism to handle key events
 void handle_keys(void) {
     struct pollfd fds[3];
     struct input_event ev;
 
-    // 设置poll描述符
+    // Set up poll descriptors
     fds[0].fd = key1_fd;
     fds[0].events = POLLIN;
     fds[1].fd = key2_fd;
     fds[1].events = POLLIN;
 
-    // 添加眼动设备到poll
+    // Add eye control device to poll
     int num_fds = 2;
     if (eye_key_fd >= 0) {
         fds[2].fd = eye_key_fd;
@@ -858,29 +859,29 @@ void handle_keys(void) {
         num_fds = 3;
     }
 
-    // 非阻塞轮询
+    // Non-blocking polling
     int ret = poll(fds, num_fds, 0);
     if (ret <= 0) return;
 
-    // 处理KEY1事件
+    // Handle KEY1 events
     if (fds[0].revents & POLLIN) {
         if (read(key1_fd, &ev, sizeof(ev)) == sizeof(ev)) {
             handle_key_event(1, &ev);
         }
     }
 
-    // 处理KEY2事件
+    // Handle KEY2 events
     if (fds[1].revents & POLLIN) {
         if (read(key2_fd, &ev, sizeof(ev)) == sizeof(ev)) {
             handle_key_event(2, &ev);
         }
     }
 
-    // 处理眼动设备事件
+    // Handle eye control device events
     if (num_fds > 2 && (fds[2].revents & POLLIN)) {
         if (read(eye_key_fd, &ev, sizeof(ev)) == sizeof(ev)) {
             if (ev.type == EV_KEY && ev.value == 1) {
-                // 检查是否是息屏或唤醒信号
+                // Check if this is screen-off or wake signal
                 if (ev.code == CUSTOM_SCREEN_OFF_BTN) {
                     enter_screen_off_mode();
                 } else if (ev.code == CUSTOM_SCREEN_ON_BTN) {
@@ -902,7 +903,7 @@ void handle_keys(void) {
     }
 }
 
-// 主函数
+// Main function
 void EPD_7in5_V2_reader_txt(void) {
     printf("E-Ink Reader: Full Continuity, No Truncation, Exact Page History\n");
 
@@ -925,7 +926,7 @@ void EPD_7in5_V2_reader_txt(void) {
     DEV_GPIO_Init();
 #endif
 
-    // 打开物理按键设备
+    // Open physical key device
     key1_fd = open("/dev/input/event3", O_RDONLY);
     key2_fd = open("/dev/input/event1", O_RDONLY);
 
@@ -934,12 +935,12 @@ void EPD_7in5_V2_reader_txt(void) {
         goto cleanup;
     }
 
-    // 初始化并查找虚拟眼控设备
+    // Initialize and find virtual eye control device
     init_eye_control_device();
     eye_key_fd = find_eye_control_device();
     if (eye_key_fd < 0) {
         printf("Warning: Failed to find eye control device, attempting to open event9 as fallback\n");
-        // 备选方案：尝试打开event9
+        // Fallback option: try opening event9
         eye_key_fd = open("/dev/input/event9", O_RDONLY | O_NONBLOCK);
         if(eye_key_fd < 0) {
             printf("Warning: Failed to open fallback eye control device\n");
@@ -982,7 +983,7 @@ void EPD_7in5_V2_reader_txt(void) {
         printf("Malloc failed\n");
         goto cleanup;
     }
-    // 分配前一帧缓存，用于对比和局部刷新
+    // Allocate previous frame buffer for comparison and partial refresh
     g_prev_frame_buffer = (UBYTE *)malloc(Imagesize);
     if (!g_prev_frame_buffer) {
         printf("Malloc for previous frame failed\n");
@@ -991,25 +992,25 @@ void EPD_7in5_V2_reader_txt(void) {
     }
     Paint_NewImage(g_frame_buffer, EPD_7IN5_V2_WIDTH, EPD_7IN5_V2_HEIGHT, ROTATE_180, WHITE);
 
-    // 显示第一页
+    // Display first page
     g_current_char_offset = 0;
     size_t next_offset = display_txt_page_from_offset(g_current_char_offset);
-    g_current_char_offset = next_offset;  // 更新g_current_char_offset为下一页的起始位置
-    // 压入第一页历史（便于后续回退到开头）
+    g_current_char_offset = next_offset;  // Update g_current_char_offset to start of next page
+    // Push first page history (to allow backing to start)
     if (history_top < MAX_HISTORY - 1) {
         history_stack[++history_top] = 0;
     }
 
     printf("Reader started. Books: %d\n", book_count);
     while (1) {
-        handle_keys(); // 处理物理按键和虚拟眼控按键
+        handle_keys(); // Handle physical keys and virtual eye control keys
         usleep(50000);
     }
 
 cleanup:
     free(g_full_text);
-    free(g_processed_text);  // 释放处理后的文本
-    free(page_offsets);      // 释放页偏移数组
+    free(g_processed_text);  // Free processed text
+    free(page_offsets);      // Free page offset array
     free(g_frame_buffer);
     free(g_prev_frame_buffer);
     if (key1_fd >= 0) close(key1_fd);
