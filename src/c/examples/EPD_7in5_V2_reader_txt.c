@@ -1,4 +1,3 @@
-EPD_7in5_V2_reader_txt.c
 // examples/EPD_7in5_V2_reader_txt.c
 #define _DEFAULT_SOURCE  // Must be defined before including header files to enable file type constants like DT_REG
 #include "EPD_7in5_V2.h"
