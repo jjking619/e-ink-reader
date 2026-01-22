@@ -91,4 +91,8 @@ UBYTE GUI_ReadBmp_16Gray(const char *path, UWORD Xstart, UWORD Ystart);
 UBYTE GUI_ReadBmp_RGB_4Color(const char *path, UWORD Xstart, UWORD Ystart);
 UBYTE GUI_ReadBmp_RGB_6Color(const char *path, UWORD Xstart, UWORD Ystart);
 UBYTE GUI_ReadBmp_RGB_7Color(const char *path, UWORD Xstart, UWORD Ystart);
+
+// 新增函数：按比例缩放并居中显示BMP图片
+UBYTE GUI_ReadBmp_Scale_Centered(const char *path, UWORD areaXstart, UWORD areaYstart, 
+                                 UWORD areaWidth, UWORD areaHeight, double scale);
 #endif

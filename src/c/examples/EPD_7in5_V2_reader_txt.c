@@ -671,13 +671,12 @@ void enter_screen_off_mode() {
 
     printf("Entering screen off mode...\n");
     screen_off = 1;
-
     // Create screen-off image
     Paint_SelectImage(g_frame_buffer);
     Paint_Clear(WHITE);
     
     // Display screen-off image using GUI_ReadBmp function
-    GUI_ReadBmp("./src/c/pic/2.bmp", 0, 0) ;
+    GUI_ReadBmp_Scale_Centered("./src/c/pic/2.bmp", 0, 0,EPD_7IN5_V2_WIDTH,EPD_7IN5_V2_HEIGHT,0.8) ;
     
     // Display screen-off image
     EPD_7IN5_V2_Init_Fast();

@@ -528,3 +528,125 @@ UBYTE GUI_ReadBmp_RGB_6Color(const char *path, UWORD Xstart, UWORD Ystart)
     return 0;
 }
 
+// New function to center the scaled image within a given area
+UBYTE GUI_ReadBmp_Scale_Centered(const char *path, UWORD areaXstart, UWORD areaYstart, 
+                                 UWORD areaWidth, UWORD areaHeight, double scale)
+{
+    FILE *fp;                     // Define a file pointer
+    BMPFILEHEADER bmpFileHeader;  // Define a bmp file header structure
+    BMPINFOHEADER bmpInfoHeader;  // Define a bmp info header structure
+
+    // Binary file open
+    if((fp = fopen(path, "rb")) == NULL) {
+        Debug("Can't open the file!\n");
+        exit(0);
+    }
+
+    // Set the file pointer from the beginning
+    fseek(fp, 0, SEEK_SET);
+    fread(&bmpFileHeader, sizeof(BMPFILEHEADER), 1, fp);    // sizeof(BMPFILEHEADER) must be 14
+    fread(&bmpInfoHeader, sizeof(BMPINFOHEADER), 1, fp);    // sizeof(BMPINFOHEADER) must be 40
+    
+    printf("Original pixel = %d * %d, scale = %.2f\r\n", bmpInfoHeader.biWidth, bmpInfoHeader.biHeight, scale);
+
+    UWORD Image_Width_Byte = (bmpInfoHeader.biWidth % 8 == 0)? (bmpInfoHeader.biWidth / 8): (bmpInfoHeader.biWidth / 8 + 1);
+    UWORD Bmp_Width_Byte = (Image_Width_Byte % 4 == 0) ? Image_Width_Byte: ((Image_Width_Byte / 4 + 1) * 4);
+    
+    // Calculate scaled dimensions
+    UWORD scaled_width = (UWORD)(bmpInfoHeader.biWidth * scale);
+    UWORD scaled_height = (UWORD)(bmpInfoHeader.biHeight * scale);
+    
+    // Adjust if scaled image is larger than the target area
+    if(scaled_width > areaWidth) {
+        scaled_width = areaWidth;
+    }
+    if(scaled_height > areaHeight) {
+        scaled_height = areaHeight;
+    }
+    
+    // Calculate centered position
+    UWORD finalXstart = areaXstart + (areaWidth - scaled_width) / 2;
+    UWORD finalYstart = areaYstart + (areaHeight - scaled_height) / 2;
+    
+    printf("Scaled and centered pixel = %d * %d at position (%d, %d)\r\n", 
+           scaled_width, scaled_height, finalXstart, finalYstart);
+
+    UBYTE *Image = (UBYTE*)malloc(Image_Width_Byte * bmpInfoHeader.biHeight);
+    if(Image == NULL) {
+        Debug("Malloc image memory failed!\n");
+        fclose(fp);
+        return 1;
+    }
+    memset(Image, 0xFF, Image_Width_Byte * bmpInfoHeader.biHeight);
+
+    // Determine if it is a monochrome bitmap
+    int readbyte = bmpInfoHeader.biBitCount;
+    if(readbyte != 1) {
+        Debug("The bmp Image is not a monochrome bitmap!\n");
+        free(Image);
+        fclose(fp);
+        exit(0);
+    }
+
+    // Determine black and white based on the palette
+    UWORD i;
+    UWORD Bcolor, Wcolor;
+    UWORD bmprgbquadsize = pow(2, bmpInfoHeader.biBitCount); // 2^1 = 2
+    BMPRGBQUAD bmprgbquad[bmprgbquadsize];                  // palette
+
+    for(i = 0; i < bmprgbquadsize; i++){
+        fread(&bmprgbquad[i], sizeof(BMPRGBQUAD), 1, fp);
+    }
+    if(bmprgbquad[0].rgbBlue == 0xff && bmprgbquad[0].rgbGreen == 0xff && bmprgbquad[0].rgbRed == 0xff) {
+        Bcolor = BLACK;
+        Wcolor = WHITE;
+    } 
+    else {
+        Bcolor = WHITE;
+        Wcolor = BLACK;
+    }
+
+    // Read image data into the cache
+    UWORD x, y;
+    UBYTE Rdata;
+    fseek(fp, bmpFileHeader.bOffset, SEEK_SET);
+    for(y = 0; y < bmpInfoHeader.biHeight; y++) { // Total display column
+        for(x = 0; x < Bmp_Width_Byte; x++) {     // Show a line in the line
+            if(fread((char *)&Rdata, 1, readbyte, fp) != readbyte) {
+                perror("get bmpdata:\r\n");
+                break;
+            }
+            if(x < Image_Width_Byte) { // bmp
+                Image[x + (bmpInfoHeader.biHeight - y - 1) * Image_Width_Byte] = Rdata;
+            }
+        }
+    }
+    fclose(fp);
+
+    // Refresh the image to the display buffer based on the displayed orientation with scaling
+    UBYTE color, temp;
+    UWORD src_x, src_y;
+    
+    for(y = 0; y < scaled_height; y++) {
+        for(x = 0; x < scaled_width; x++) {
+            // Map scaled coordinates back to original image coordinates
+            src_x = (UWORD)(x / scale);
+            src_y = (UWORD)(y / scale);
+            
+            if(src_x >= bmpInfoHeader.biWidth || src_y >= bmpInfoHeader.biHeight) {
+                continue;
+            }
+            
+            if(finalXstart + x > Paint.Width || finalYstart + y > Paint.Height) {
+                break;
+            }
+            
+            temp = Image[(src_x / 8) + (src_y * Image_Width_Byte)];
+            color = (((temp << (src_x%8)) & 0x80) == 0x80) ? Bcolor : Wcolor;
+            Paint_SetPixel(finalXstart + x, finalYstart + y, color);
+        }
+    }
+    
+    free(Image);
+    return 0;
+}
