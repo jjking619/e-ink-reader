@@ -76,14 +76,7 @@
 - OpenCV-Python == 4.8.1.78
 - MediaPipe == 0.10.9
 - evdev == 1.9.2
--numpy==1.24.3
-
-## 📚 准备书籍文件
-
-在[e-ink-reader/src/tools/books](file:///home/pi/e-ink-reader/src/tools/books)下放入.txt书籍文件即可。
-
-- 将您的 .txt 文件放入此目录，并确保编码为 GB2312。
-- Windows 用户操作路径：记事本 → 另存为 → 编码选"ANSI"（即 GB2312）。
+- numpy==1.24.3
 
 ## 🚀 完整部署指南
 
@@ -135,7 +128,7 @@ python3 --version
 ```
 
 ### 步骤 4：激活Python虚拟环境
-在根目录下执行下面命令激活Python虚拟环境：
+执行下面命令创建并激活Python虚拟环境：
 ```bash
 python3.10 -m venv ~/mediapipe_env
 source ~/mediapipe_env/bin/activate
@@ -202,7 +195,14 @@ ls /dev/spi*
 echo "pi ALL=(ALL) NOPASSWD: /home/pi/e-ink-reader/src/c/epd" | sudo tee /etc/sudoers.d/ebook-reader
 ```
 
-### 步骤 12：运行项目
+### 步骤 12：准备书籍文件
+
+将您的 .txt 文件放入**e-ink-reader/src/tools/books**目录下，并确保编码为 **GB2312**。
+
+> Windows 用户操作路径：记事本 → 另存为 → 编码选"ANSI"（即 GB2312）。
+
+### 步骤 13：运行项目
+
 在e-ink-reader文件夹下执行[startup.sh](file:///home/pi/e-ink-reader/startup.sh)脚本运行项目：
 ```bash
 cd /home/pi/e-ink-reader

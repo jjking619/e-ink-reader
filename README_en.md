@@ -78,13 +78,6 @@ In terms of display, the system adopts a partial refresh and partitioned renderi
 - evdev == 1.9.2
 - numpy == 1.24.3
 
-## 📚 Preparing Book Files
-
-Place your .txt book files in [e-ink-reader/src/tools/books](file:///home/pi/e-ink-reader/src/tools/books).
-
-- Place your .txt files in this directory with GB2312 encoding
-- Windows users: Notepad → Save As → Encoding select "ANSI" (which is GB2312)
-
 ## 🚀 Complete Deployment Guide
 
 ### Step 1: Get Project Source Code
@@ -135,6 +128,9 @@ python3 --version
 ```
 
 ### Step 4: Activate Python Virtual Environment
+
+Execute the following command to create and activate a Python virtual environment.
+
 ```bash
 python3.10 -m venv ~/mediapipe_env
 source ~/mediapipe_env/bin/activate
@@ -163,7 +159,7 @@ make CC=gcc EPD=epd7in5V2
 sudo nano /etc/udev/rules.d/99-uinput.rules
 ```
 
-Add this line:
+Add the following statement to the file, press **"ctrl + o" + Enter** to save the edited content, then press **"ctrl + x"** to exit editing:
 ```
 KERNEL=="uinput", MODE="0660", GROUP="input"
 ```
@@ -195,7 +191,14 @@ ls /dev/spi*
 echo "pi ALL=(ALL) NOPASSWD: /home/pi/e-ink-reader/src/c/epd" | sudo tee /etc/sudoers.d/ebook-reader
 ```
 
-### Step 12: Run Project
+### Step 12: Prepare Book Files
+
+Put your .txt files in the **e-ink-reader/src/tools/books** directory and ensure encoding is **GB2312**.
+
+> Windows user operation path: Notepad → Save As → Select encoding "ANSI" (which is GB2312).
+
+### Step 13: Run Project
+
 ```bash
 cd /home/pi/e-ink-reader
 ./startup.sh
