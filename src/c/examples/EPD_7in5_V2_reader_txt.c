@@ -38,6 +38,8 @@
 
 // Screen-off related definitions
 static int screen_off = 0;  // Whether currently in screen-off state
+// 添加全局变量来跟踪息屏状态
+static int screen_off_recovering = 0;
 
 static char current_file[256] = {0};
 static UBYTE *g_frame_buffer = NULL;
@@ -84,6 +86,7 @@ int find_eye_control_device();
 void init_eye_control_device();
 void enter_screen_off_mode();
 void exit_screen_off_mode();
+void quick_resume_from_screen_off() ;
 
 const char* get_ext(const char* filename) {
     const char* dot = strrchr(filename, '.');
@@ -483,11 +486,7 @@ size_t display_txt_page_from_offset(size_t start_offset)
 
         EPD_7IN5_V2_Init_Fast();
         EPD_7IN5_V2_Clear();
-        // Reduce delay time to speed up initialization
-        // DEV_Delay_ms(500); // Reduced from 1500ms to 500ms
         EPD_7IN5_V2_Display(g_frame_buffer);
-        // Reduce delay time to speed up initialization
-        // DEV_Delay_ms(200); // Reduced from 500ms to 200ms
         EPD_7IN5_V2_Init_Part();
 
         first_display_done = 1;
@@ -517,9 +516,10 @@ size_t display_txt_page_from_offset(size_t start_offset)
 
         header_drawn = 1;
     }
-    else {
+    else if (!screen_off_recovering) {
         /* =================================================
          * 3. Page turning: Only clear CONTENT + FOOTER (not Header)
+         *    But skip during screen-off recovery
          * ================================================= */
         Paint_ClearWindows(
             0,
@@ -534,7 +534,6 @@ size_t display_txt_page_from_offset(size_t start_offset)
      * 4. Text layout drawing
      * ===================================================== */
     const int left_margin = 0;
-    // const int right_margin = 0;
     const int max_x = EPD_7IN5_V2_WIDTH ;
 
     const int lh_en = Font16.Height;
@@ -627,13 +626,16 @@ size_t display_txt_page_from_offset(size_t start_offset)
     /* =====================================================
      * 5. Footer: Page number (using accurate page count calculation)
      * ===================================================== */
-    Paint_ClearWindows(
-        0,
-        FOOTER_Y_START,
-        EPD_7IN5_V2_WIDTH,
-        EPD_7IN5_V2_HEIGHT - FOOTER_Y_START,
-        WHITE
-    );
+    // Only clear footer if not in screen-off recovery
+    if (!screen_off_recovering) {
+        Paint_ClearWindows(
+            0,
+            FOOTER_Y_START,
+            EPD_7IN5_V2_WIDTH,
+            EPD_7IN5_V2_HEIGHT - FOOTER_Y_START,
+            WHITE
+        );
+    }
 
     // Use accurate page count calculation
     int cur_page = get_current_page_index(start_offset);
@@ -684,39 +686,145 @@ void enter_screen_off_mode() {
     EPD_7IN5_V2_Sleep(); // Enter sleep mode to save power
 }
 
-// Exit screen-off mode
+// Exit screen-off mode (optimized version)
 void exit_screen_off_mode() {
     if (!screen_off) return; // If not in screen-off state, return directly
 
     printf("Exiting screen off mode...\n");
     screen_off = 0;
+    screen_off_recovering = 1;  // Set recovery flag
 
-    // Reinitialize EPD
-    // EPD_7IN5_V2_Init();
-    // EPD_7IN5_V2_Clear();
-    // EPD_7IN5_V2_Init_Part();
-
-    // Set first_display_done to 0, book_changed to 0 to ensure Header area gets redrawn
-    first_display_done = 0;
-    book_changed = 0;
-    header_drawn = 0;
-
-    // Redisplay current page, this will redraw entire interface
-    display_txt_page_from_offset(g_current_char_offset);
+    // Fast wake up: only initialize partial refresh mode
+    EPD_7IN5_V2_Init_Part();
     
-    // During screen-off, accumulated input events may exist, read and discard them to avoid misoperation
+    // Set flags to ensure only content and footer are refreshed
+    first_display_done = 1;
+    book_changed = 0;
+    header_drawn = 1;
+
+    // Use fast recovery: directly refresh current page
+    if (g_frame_buffer && g_processed_text) {
+        display_txt_page_from_offset(g_current_char_offset);
+    }
+    
+    screen_off_recovering = 0;  // Recovery completed
+    
+    // Clear accumulated events from eye control device
     struct input_event ev;
     if (eye_key_fd >= 0) {
-        // Clear accumulated events from eye control device
         while (read(eye_key_fd, &ev, sizeof(ev)) == sizeof(ev)) {
             // Loop until no more events
         }
     }
     
-    // Add brief delay to allow system to process events
-    usleep(100000); // 100ms delay
+    // Brief delay to allow system to process events
+    usleep(50000); // 50ms delay
 }
 
+// New: Optimized screen-off recovery function
+void quick_resume_from_screen_off() {
+    if (!screen_off) return;
+    
+    printf("Quick resume from screen off...\n");
+    
+    // Fast wake up
+    EPD_7IN5_V2_Init_Part();
+    
+    // Set recovery flags
+    screen_off_recovering = 1;
+    screen_off = 0;
+    
+    // Directly draw current page (no additional clearing)
+    if (g_frame_buffer && g_processed_text) {
+        Paint_SelectImage(g_frame_buffer);
+        
+        // Clear only content area
+        Paint_ClearWindows(0, CONTENT_Y_START, EPD_7IN5_V2_WIDTH,
+                          FOOTER_Y_START - CONTENT_Y_START, WHITE);
+        
+        // Draw text content
+        size_t i = g_current_char_offset;
+        const int left_margin = 0;
+        const int max_x = EPD_7IN5_V2_WIDTH;
+        const int lh_en = Font16.Height;
+        const int lh_cn = Font12CN.Height;
+        int y = CONTENT_Y_START + HEADER_HEIGHT + 10;
+        const int text_bottom = FOOTER_Y_START;
+        
+        while (i < g_processed_text_size && y < text_bottom) {
+            int x = left_margin;
+            char line[512] = {0};
+            int len = 0;
+            int has_cn = 0;
+
+            while (i < g_processed_text_size) {
+                unsigned char c = (unsigned char)g_processed_text[i];
+                if (c == '\n') {
+                    i++;
+                    x = left_margin + (Font16.Width * 2);
+                    continue;
+                }
+
+                int bytes = 1;
+                if (c > 0x80 && i + 1 < g_processed_text_size) {
+                    if ((unsigned char)g_processed_text[i+1] > 0x40) {
+                        bytes = 2;
+                    }
+                }
+
+                int width = (bytes == 1) ? Font16.Width : Font12CN.Width;
+
+                if (x + width > max_x) break;
+
+                for (int k = 0; k < bytes && i + k < g_processed_text_size; k++)
+                    line[len++] = g_processed_text[i + k];
+
+                if (bytes > 1) has_cn = 1;
+                i += bytes;
+                x += width;
+            }
+
+            if (len > 0) {
+                int lh = has_cn ? lh_cn : lh_en;
+                if (y + lh > text_bottom) break;
+
+                line[len] = '\0';
+                if (has_cn)
+                    Paint_DrawString_CN(left_margin, y, line, &Font12CN, BLACK, WHITE);
+                else
+                    Paint_DrawString_EN(left_margin, y, line, &Font16, BLACK, WHITE);
+
+                y += lh;
+            }
+        }
+        
+        // Draw footer
+        Paint_ClearWindows(0, FOOTER_Y_START, EPD_7IN5_V2_WIDTH,
+                          EPD_7IN5_V2_HEIGHT - FOOTER_Y_START, WHITE);
+        
+        int cur_page = get_current_page_index(g_current_char_offset);
+        int total_pages_calc = total_pages > 0 ? total_pages : (g_processed_text_size / 2000) + 1;
+        char page[64];
+        snprintf(page, sizeof(page), "Page %d / %d", cur_page, total_pages_calc);
+        Paint_DrawString_EN(EPD_7IN5_V2_WIDTH - 160, FOOTER_Y_START + 10,
+                           page, &Font16, BLACK, WHITE);
+        
+        // Partial refresh (skip Header area)
+        EPD_7IN5_V2_Display_Part(g_frame_buffer, 0, CONTENT_Y_START,
+                                EPD_7IN5_V2_WIDTH, 
+                                EPD_7IN5_V2_HEIGHT - CONTENT_Y_START);
+    }
+    
+    screen_off_recovering = 0;
+    
+    // Clear input events
+    struct input_event ev;
+    if (eye_key_fd >= 0) {
+        while (read(eye_key_fd, &ev, sizeof(ev)) == sizeof(ev)) {}
+    }
+    
+    usleep(30000); // 30ms short delay
+}
 // Switch to next book
 void next_book() {
     if (book_count > 1) {
