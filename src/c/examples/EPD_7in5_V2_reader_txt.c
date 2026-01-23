@@ -50,7 +50,6 @@ static int eye_key_fd = -1; // New: eye_page_turner virtual device
 static int first_display_done = 0;
 static int book_changed = 0;  // Flag to mark whether book has changed
 static int header_drawn = 0;  // New: flag to mark if Header area has been drawn
-
 // Multi-book support
 static char book_list[MAX_BOOKS][256];
 static int book_count = 0;
@@ -503,7 +502,6 @@ size_t display_txt_page_from_offset(size_t start_offset)
 
         snprintf(title, sizeof(title), "Book: %s", name);
         Paint_DrawString_EN(10, 10, title, &Font16, BLACK, WHITE);
-
         Paint_DrawLine(
             10,
             HEADER_HEIGHT,
@@ -513,7 +511,7 @@ size_t display_txt_page_from_offset(size_t start_offset)
             DOT_PIXEL_1X1,
             LINE_STYLE_SOLID
         );
-
+        printf("Drew header\n");
         header_drawn = 1;
     }
     else if (!screen_off_recovering) {
@@ -627,13 +625,24 @@ size_t display_txt_page_from_offset(size_t start_offset)
      * 5. Footer: Page number (using accurate page count calculation)
      * ===================================================== */
     // Only clear footer if not in screen-off recovery
-    if (!screen_off_recovering) {
-        Paint_ClearWindows(
+    if (screen_off_recovering) {
+        // 息屏恢复时：刷新整个屏幕（包括Header）
+        EPD_7IN5_V2_Display_Part(
+            g_frame_buffer,
             0,
-            FOOTER_Y_START,
+            0,  // 从顶部开始，包括Header
             EPD_7IN5_V2_WIDTH,
-            EPD_7IN5_V2_HEIGHT - FOOTER_Y_START,
-            WHITE
+            EPD_7IN5_V2_HEIGHT  // 刷新整个屏幕高度
+        );
+        screen_off_recovering = 0;
+    } else {
+        // 常规翻页：只刷新内容+页脚区域
+        EPD_7IN5_V2_Display_Part(
+            g_frame_buffer,
+            0,
+            CONTENT_Y_START,
+            EPD_7IN5_V2_WIDTH,
+            EPD_7IN5_V2_HEIGHT - CONTENT_Y_START
         );
     }
 
@@ -656,13 +665,13 @@ size_t display_txt_page_from_offset(size_t start_offset)
     /* =====================================================
      * 6. Partial refresh (CONTENT + FOOTER only)
      * ===================================================== */
-    EPD_7IN5_V2_Display_Part(
-        g_frame_buffer,
-        0,
-        CONTENT_Y_START,
-        EPD_7IN5_V2_WIDTH,
-        EPD_7IN5_V2_HEIGHT - CONTENT_Y_START
-    );
+        EPD_7IN5_V2_Display_Part(
+            g_frame_buffer,
+            0,
+            CONTENT_Y_START,
+            EPD_7IN5_V2_WIDTH,
+            EPD_7IN5_V2_HEIGHT - CONTENT_Y_START
+        );
 
     return i;  // Return actual ending offset
 }
@@ -700,7 +709,7 @@ void exit_screen_off_mode() {
     // Set flags to ensure only content and footer are refreshed
     first_display_done = 1;
     book_changed = 0;
-    header_drawn = 1;
+    header_drawn = 0;  // 仅标记header需要重绘，由display_txt_page_from_offset统一处理
 
     // Use fast recovery: directly refresh current page
     if (g_frame_buffer && g_processed_text) {
