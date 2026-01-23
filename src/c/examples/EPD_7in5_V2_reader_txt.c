@@ -85,7 +85,6 @@ int find_eye_control_device();
 void init_eye_control_device();
 void enter_screen_off_mode();
 void exit_screen_off_mode();
-void quick_resume_from_screen_off() ;
 
 const char* get_ext(const char* filename) {
     const char* dot = strrchr(filename, '.');
@@ -511,7 +510,7 @@ size_t display_txt_page_from_offset(size_t start_offset)
             DOT_PIXEL_1X1,
             LINE_STYLE_SOLID
         );
-        printf("Drew header\n");
+        // printf("Drew header\n");
         header_drawn = 1;
     }
     else if (!screen_off_recovering) {
@@ -725,114 +724,8 @@ void exit_screen_off_mode() {
             // Loop until no more events
         }
     }
-    
     // Brief delay to allow system to process events
-    usleep(50000); // 50ms delay
-}
-
-// New: Optimized screen-off recovery function
-void quick_resume_from_screen_off() {
-    if (!screen_off) return;
-    
-    printf("Quick resume from screen off...\n");
-    
-    // Fast wake up
-    EPD_7IN5_V2_Init_Part();
-    
-    // Set recovery flags
-    screen_off_recovering = 1;
-    screen_off = 0;
-    
-    // Directly draw current page (no additional clearing)
-    if (g_frame_buffer && g_processed_text) {
-        Paint_SelectImage(g_frame_buffer);
-        
-        // Clear only content area
-        Paint_ClearWindows(0, CONTENT_Y_START, EPD_7IN5_V2_WIDTH,
-                          FOOTER_Y_START - CONTENT_Y_START, WHITE);
-        
-        // Draw text content
-        size_t i = g_current_char_offset;
-        const int left_margin = 0;
-        const int max_x = EPD_7IN5_V2_WIDTH;
-        const int lh_en = Font16.Height;
-        const int lh_cn = Font12CN.Height;
-        int y = CONTENT_Y_START + HEADER_HEIGHT + 10;
-        const int text_bottom = FOOTER_Y_START;
-        
-        while (i < g_processed_text_size && y < text_bottom) {
-            int x = left_margin;
-            char line[512] = {0};
-            int len = 0;
-            int has_cn = 0;
-
-            while (i < g_processed_text_size) {
-                unsigned char c = (unsigned char)g_processed_text[i];
-                if (c == '\n') {
-                    i++;
-                    x = left_margin + (Font16.Width * 2);
-                    continue;
-                }
-
-                int bytes = 1;
-                if (c > 0x80 && i + 1 < g_processed_text_size) {
-                    if ((unsigned char)g_processed_text[i+1] > 0x40) {
-                        bytes = 2;
-                    }
-                }
-
-                int width = (bytes == 1) ? Font16.Width : Font12CN.Width;
-
-                if (x + width > max_x) break;
-
-                for (int k = 0; k < bytes && i + k < g_processed_text_size; k++)
-                    line[len++] = g_processed_text[i + k];
-
-                if (bytes > 1) has_cn = 1;
-                i += bytes;
-                x += width;
-            }
-
-            if (len > 0) {
-                int lh = has_cn ? lh_cn : lh_en;
-                if (y + lh > text_bottom) break;
-
-                line[len] = '\0';
-                if (has_cn)
-                    Paint_DrawString_CN(left_margin, y, line, &Font12CN, BLACK, WHITE);
-                else
-                    Paint_DrawString_EN(left_margin, y, line, &Font16, BLACK, WHITE);
-
-                y += lh;
-            }
-        }
-        
-        // Draw footer
-        Paint_ClearWindows(0, FOOTER_Y_START, EPD_7IN5_V2_WIDTH,
-                          EPD_7IN5_V2_HEIGHT - FOOTER_Y_START, WHITE);
-        
-        int cur_page = get_current_page_index(g_current_char_offset);
-        int total_pages_calc = total_pages > 0 ? total_pages : (g_processed_text_size / 2000) + 1;
-        char page[64];
-        snprintf(page, sizeof(page), "Page %d / %d", cur_page, total_pages_calc);
-        Paint_DrawString_EN(EPD_7IN5_V2_WIDTH - 160, FOOTER_Y_START + 10,
-                           page, &Font16, BLACK, WHITE);
-        
-        // Partial refresh (skip Header area)
-        EPD_7IN5_V2_Display_Part(g_frame_buffer, 0, CONTENT_Y_START,
-                                EPD_7IN5_V2_WIDTH, 
-                                EPD_7IN5_V2_HEIGHT - CONTENT_Y_START);
-    }
-    
-    screen_off_recovering = 0;
-    
-    // Clear input events
-    struct input_event ev;
-    if (eye_key_fd >= 0) {
-        while (read(eye_key_fd, &ev, sizeof(ev)) == sizeof(ev)) {}
-    }
-    
-    usleep(30000); // 30ms short delay
+    // usleep(50000); // 50ms delay
 }
 // Switch to next book
 void next_book() {
