@@ -521,18 +521,18 @@ size_t display_txt_page_from_offset(size_t start_offset)
         );
         header_drawn = 1;
     }
-    else if (!screen_off_recovering) {
+    else {
         /* =================================================
          * 3. Page turning: Only clear CONTENT + FOOTER (not Header)
          *    But skip during screen-off recovery
          * ================================================= */
-    Paint_ClearWindows(
-        0,
-        CONTENT_Y_START,
-        EPD_7IN5_V2_WIDTH-10,
-        EPD_7IN5_V2_HEIGHT - CONTENT_Y_START,
-        WHITE
-    );
+     Paint_ClearWindows(
+            0,
+            CONTENT_Y_START,
+            EPD_7IN5_V2_WIDTH-10,
+            EPD_7IN5_V2_HEIGHT - CONTENT_Y_START,
+            WHITE
+        );
     }
 
     /* =====================================================
@@ -545,7 +545,7 @@ size_t display_txt_page_from_offset(size_t start_offset)
     const int lh_cn = Font12CN.Height;
 
     int y = CONTENT_Y_START+HEADER_HEIGHT +10 ;
-    const int text_bottom = FOOTER_Y_START ;
+    const int text_bottom = EPD_7IN5_V2_HEIGHT - CONTENT_Y_START+10 ;
 
     // Use processed text
     size_t i = start_offset;
@@ -639,7 +639,7 @@ size_t display_txt_page_from_offset(size_t start_offset)
             0,
             0,  // 从顶部开始，包括Header
             EPD_7IN5_V2_WIDTH,
-            EPD_7IN5_V2_HEIGHT-CONTENT_Y_START // 刷新整个屏幕高度
+            EPD_7IN5_V2_HEIGHT  // 刷新整个屏幕高度
         );
         screen_off_recovering = 0;
     } else {
@@ -647,9 +647,9 @@ size_t display_txt_page_from_offset(size_t start_offset)
         EPD_7IN5_V2_Display_Part(
             g_frame_buffer,
             0,
-            HEADER_HEIGHT+10,
+            CONTENT_Y_START,
             EPD_7IN5_V2_WIDTH,
-            EPD_7IN5_V2_HEIGHT - CONTENT_Y_START -2
+            EPD_7IN5_V2_HEIGHT - CONTENT_Y_START
         );
     }
 
@@ -662,7 +662,7 @@ size_t display_txt_page_from_offset(size_t start_offset)
 
     Paint_DrawString_EN(
         EPD_7IN5_V2_WIDTH - 160,
-        FOOTER_Y_START + 10,  // Move page number down 10 pixels
+        EPD_7IN5_V2_HEIGHT - CONTENT_Y_START + 20,  // Move page number down 10 pixels
         page,
         &Font16,
         BLACK,
@@ -675,9 +675,9 @@ size_t display_txt_page_from_offset(size_t start_offset)
         EPD_7IN5_V2_Display_Part(
             g_frame_buffer,
             0,
-            HEADER_HEIGHT+10,
+            CONTENT_Y_START,
             EPD_7IN5_V2_WIDTH,
-            EPD_7IN5_V2_HEIGHT - CONTENT_Y_START -2
+            EPD_7IN5_V2_HEIGHT - CONTENT_Y_START
         );
 
     return i;  // Return actual ending offset
