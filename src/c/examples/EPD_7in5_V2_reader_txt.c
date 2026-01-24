@@ -36,12 +36,22 @@
 #define CONTENT_Y_START   (HEADER_HEIGHT + 8)
 #define FOOTER_Y_START    (EPD_7IN5_V2_HEIGHT - FOOTER_HEIGHT)
 
+// Function declarations
+void safe_truncate_filename(char* dest, const char* src, size_t dest_size);
+char* process_text_content(const char* raw_text, size_t raw_size);
+void calculate_page_info();
+int get_current_page_index(size_t offset);
+int find_eye_control_device();
+void init_eye_control_device();
+void enter_screen_off_mode();
+void exit_screen_off_mode();
+
 // Screen-off related definitions
 static int screen_off = 0;  // Whether currently in screen-off state
 // 添加全局变量来跟踪息屏状态
 static int screen_off_recovering = 0;
 
-static char current_file[256] = {0};
+static char current_file[2048] = {0};  // Reasonable size for file path
 static UBYTE *g_frame_buffer = NULL;
 static UBYTE *g_prev_frame_buffer = NULL; // Used to compare differences between frames for implementing partial refresh
 static int key1_fd = -1; // event3: next page / long press: next book
@@ -51,7 +61,7 @@ static int first_display_done = 0;
 static int book_changed = 0;  // Flag to mark whether book has changed
 static int header_drawn = 0;  // New: flag to mark if Header area has been drawn
 // Multi-book support
-static char book_list[MAX_BOOKS][256];
+static char book_list[MAX_BOOKS][2048];  // Reasonable size for file path
 static int book_count = 0;
 static int current_book_index = 0;
 
@@ -77,14 +87,6 @@ static size_t *page_offsets = NULL;  // Store starting offset of each page
 static int total_pages = 0;          // Total number of pages
 static int current_page_index = 0;   // Current page index (starting from 0)
 
-// Function declarations
-char* process_text_content(const char* raw_text, size_t raw_size);
-void calculate_page_info();
-int get_current_page_index(size_t offset);
-int find_eye_control_device();
-void init_eye_control_device();
-void enter_screen_off_mode();
-void exit_screen_off_mode();
 
 const char* get_ext(const char* filename) {
     const char* dot = strrchr(filename, '.');
@@ -434,7 +436,7 @@ void show_error(const char* msg) {
     sleep(3);
 }
 
-// Core: Draw one page from specified offset and return starting offset of next page
+/* Core: Draw one page from specified offset and return starting offset of next page */
 size_t display_txt_page_from_offset(size_t start_offset)
 {
     // Use processed text instead of original text
@@ -454,16 +456,13 @@ size_t display_txt_page_from_offset(size_t start_offset)
         Paint_Clear(WHITE);
 
         /* Header —— Permanent area */
-        char title[256];
+        char title[512];
         const char* name = strrchr(current_file, '/');
         name = name ? name + 1 : current_file;
+        
+        char display_name[500];
+        safe_truncate_filename(display_name, name, sizeof(display_name));
 
-        // Create copy and remove extension
-        char display_name[256];
-        strncpy(display_name, name, sizeof(display_name)-1);
-        display_name[sizeof(display_name)-1] = 0;
-
-        // Find last period
         char *dot = strrchr(display_name, '.');
         if (dot && dot != display_name) {
             *dot = 0;
@@ -481,7 +480,6 @@ size_t display_txt_page_from_offset(size_t start_offset)
             DOT_PIXEL_1X1,
             LINE_STYLE_SOLID
         );
-
         EPD_7IN5_V2_Init_Fast();
         EPD_7IN5_V2_Clear();
         EPD_7IN5_V2_Display(g_frame_buffer);
@@ -489,17 +487,28 @@ size_t display_txt_page_from_offset(size_t start_offset)
 
         first_display_done = 1;
         book_changed = 0;
-        header_drawn = 1;  // Mark header as drawn
+        header_drawn = 1;
     }
     else if (!header_drawn) {
         /* =================================================
-         * 2. Ensure Header area always exists (even after partial refresh)
+         * 2. Ensure Header area always exists
+         *    包括息屏恢复时需要重绘Header的情况
          * ===================================================== */
-        char title[256];
+        // 清除Header区域
+        Paint_ClearWindows(0, 0, EPD_7IN5_V2_WIDTH, HEADER_HEIGHT + 8, WHITE);
+        char title[512];
         const char* name = strrchr(current_file, '/');
         name = name ? name + 1 : current_file;
+        
+        char display_name[500];
+        safe_truncate_filename(display_name, name, sizeof(display_name));
+        
+        char *ext = strrchr(display_name, '.');
+        if (ext && ext != display_name) {
+            *ext = 0;
+        }
 
-        snprintf(title, sizeof(title), "Book: %s", name);
+        snprintf(title, sizeof(title), "Book: %s", display_name);
         Paint_DrawString_EN(10, 10, title, &Font16, BLACK, WHITE);
         Paint_DrawLine(
             10,
@@ -510,7 +519,6 @@ size_t display_txt_page_from_offset(size_t start_offset)
             DOT_PIXEL_1X1,
             LINE_STYLE_SOLID
         );
-        // printf("Drew header\n");
         header_drawn = 1;
     }
     else if (!screen_off_recovering) {
@@ -518,13 +526,13 @@ size_t display_txt_page_from_offset(size_t start_offset)
          * 3. Page turning: Only clear CONTENT + FOOTER (not Header)
          *    But skip during screen-off recovery
          * ================================================= */
-        Paint_ClearWindows(
-            0,
-            CONTENT_Y_START,
-            EPD_7IN5_V2_WIDTH-10,
-            EPD_7IN5_V2_HEIGHT - CONTENT_Y_START,
-            WHITE
-        );
+    Paint_ClearWindows(
+        0,
+        CONTENT_Y_START,
+        EPD_7IN5_V2_WIDTH-10,
+        EPD_7IN5_V2_HEIGHT - CONTENT_Y_START,
+        WHITE
+    );
     }
 
     /* =====================================================
@@ -631,7 +639,7 @@ size_t display_txt_page_from_offset(size_t start_offset)
             0,
             0,  // 从顶部开始，包括Header
             EPD_7IN5_V2_WIDTH,
-            EPD_7IN5_V2_HEIGHT  // 刷新整个屏幕高度
+            EPD_7IN5_V2_HEIGHT-CONTENT_Y_START // 刷新整个屏幕高度
         );
         screen_off_recovering = 0;
     } else {
@@ -639,9 +647,9 @@ size_t display_txt_page_from_offset(size_t start_offset)
         EPD_7IN5_V2_Display_Part(
             g_frame_buffer,
             0,
-            CONTENT_Y_START,
+            HEADER_HEIGHT+10,
             EPD_7IN5_V2_WIDTH,
-            EPD_7IN5_V2_HEIGHT - CONTENT_Y_START
+            EPD_7IN5_V2_HEIGHT - CONTENT_Y_START -2
         );
     }
 
@@ -667,9 +675,9 @@ size_t display_txt_page_from_offset(size_t start_offset)
         EPD_7IN5_V2_Display_Part(
             g_frame_buffer,
             0,
-            CONTENT_Y_START,
+            HEADER_HEIGHT+10,
             EPD_7IN5_V2_WIDTH,
-            EPD_7IN5_V2_HEIGHT - CONTENT_Y_START
+            EPD_7IN5_V2_HEIGHT - CONTENT_Y_START -2
         );
 
     return i;  // Return actual ending offset
@@ -701,7 +709,7 @@ void exit_screen_off_mode() {
     printf("Exiting screen off mode...\n");
     screen_off = 0;
     screen_off_recovering = 1;  // Set recovery flag
-
+    
     // Fast wake up: only initialize partial refresh mode
     EPD_7IN5_V2_Init_Part();
     
@@ -720,13 +728,42 @@ void exit_screen_off_mode() {
     // Clear accumulated events from eye control device
     struct input_event ev;
     if (eye_key_fd >= 0) {
-        while (read(eye_key_fd, &ev, sizeof(ev)) == sizeof(ev)) {
-            // Loop until no more events
+        while (read(eye_key_fd, &ev, sizeof(ev)) == sizeof(ev)) {}
+    }
+}
+
+// Function to safely truncate filename for display
+void safe_truncate_filename(char* dest, const char* src, size_t dest_size) {
+    if (!src || !dest || dest_size == 0) return;
+    
+    size_t src_len = strlen(src);
+    if (src_len < dest_size) {
+        strncpy(dest, src, dest_size - 1);
+        dest[dest_size - 1] = '\0';
+    } else {
+        // Need to truncate - try to preserve the extension
+        const char* ext = strrchr(src, '.');
+        if (ext) {
+            size_t ext_len = strlen(ext);
+            size_t base_len = dest_size - ext_len - 4; // 3 dots + null terminator
+            
+            if (base_len > 0) {
+                strncpy(dest, src, base_len);
+                strcpy(dest + base_len, "...");
+                strcat(dest, ext);
+            } else {
+                // Extension is too long, just truncate from beginning
+                strncpy(dest, src + (src_len - dest_size + 1), dest_size - 1);
+                dest[dest_size - 1] = '\0';
+            }
+        } else {
+            // No extension, just truncate
+            strncpy(dest, src, dest_size - 4);
+            strcpy(dest + dest_size - 4, "...");
         }
     }
-    // Brief delay to allow system to process events
-    // usleep(50000); // 50ms delay
 }
+
 // Switch to next book
 void next_book() {
     if (book_count > 1) {
@@ -966,8 +1003,14 @@ void EPD_7in5_V2_reader_txt(void) {
         if (entry->d_type == DT_REG) {
             const char* ext = get_ext(entry->d_name);
             if (strcasecmp(ext, "txt") == 0) {
-                snprintf(book_list[book_count], sizeof(book_list[0]), "%s/%s", BOOK_PATH, entry->d_name);
-                book_count++;
+                // Check if the combined path would fit in our buffer
+                size_t path_len = strlen(BOOK_PATH) + 1 + strlen(entry->d_name);
+                if (path_len < sizeof(book_list[0])) {
+                    snprintf(book_list[book_count], sizeof(book_list[0]), "%s/%s", BOOK_PATH, entry->d_name);
+                    book_count++;
+                } else {
+                    printf("Skipping file with path too long: %s\n", entry->d_name);
+                }
             }
         }
     }
@@ -978,7 +1021,14 @@ void EPD_7in5_V2_reader_txt(void) {
     }
 
     current_book_index = 0;
-    snprintf(current_file, sizeof(current_file), "%s", book_list[current_book_index]);
+    // Copy safely with truncation check
+    if (strlen(book_list[current_book_index]) >= sizeof(current_file)) {
+        printf("Warning: Book path too long, truncating\n");
+        strncpy(current_file, book_list[current_book_index], sizeof(current_file) - 1);
+        current_file[sizeof(current_file) - 1] = '\0';
+    } else {
+        strcpy(current_file, book_list[current_book_index]);
+    }
 
     if (load_txt_file(current_file) != 0) {
         show_error("TXT load failed");
