@@ -10,6 +10,36 @@ In terms of display, the system adopts a partial refresh and partitioned renderi
 
 ![Interface Preview](assets/main_reader.png)
 
+## Directory Structure
+
+```
+e-ink-reader/
+├── README.md                 # Project description document
+├── README_en.md             # English version of description document
+├── startup.sh               # Project startup script
+├── main.py                  # Main program entry file
+├── requirements.txt         # Python dependency package list
+├── assets/                  # Store project image resources
+│   └── main_reader.png      # Main interface preview image
+├── lg-master/               # LGPIO library source code directory
+│   ├── README               # LGPIO library documentation
+│   ├── Makefile             # LGPIO library compilation file
+│   ├── lgpio.h              # LGPIO library header file
+│   ├── lgpio.c              # LGPIO library implementation file
+│   ├── PY_LGPIO/            # Python LGPIO module
+│   ├── PY_RGPIO/            # Python RGPIO module
+│   └── ...                  # Other LGPIO library related files
+├── src/
+│   ├── c/                   # C language driver source code directory
+│   │   ├── Makefile         # C program compilation file
+│   │   ├── lib/             # Driver library file directory
+│   │   ├── examples/        # Example programs directory
+│   │   ├── pic/             # Image resources directory
+│   │   └── list.txt         # Screen model correspondence table
+└── └── tools/
+        └── books/           # Directory for storing book files
+```
+
 ## 🌟 Core Features
 
 | Feature | Description |

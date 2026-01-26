@@ -33,7 +33,7 @@
 #define HEADER_HEIGHT   30
 #define FOOTER_HEIGHT   30  // Increase footer height to provide space for page numbers
 
-#define CONTENT_Y_START   (HEADER_HEIGHT + 8)
+#define CONTENT_Y_START   (HEADER_HEIGHT + 10)
 #define FOOTER_Y_START    (EPD_7IN5_V2_HEIGHT - FOOTER_HEIGHT)
 
 // Function declarations
@@ -496,6 +496,15 @@ size_t display_txt_page_from_offset(size_t start_offset)
          * ===================================================== */
         // 清除Header区域
         Paint_ClearWindows(0, 0, EPD_7IN5_V2_WIDTH, HEADER_HEIGHT + 8, WHITE);
+        // 新增：清除内容区域和页脚区域
+        Paint_ClearWindows(
+            0,
+            CONTENT_Y_START,
+            EPD_7IN5_V2_WIDTH,
+            EPD_7IN5_V2_HEIGHT ,
+            BLACK
+        );
+      
         char title[512];
         const char* name = strrchr(current_file, '/');
         name = name ? name + 1 : current_file;
@@ -539,13 +548,14 @@ size_t display_txt_page_from_offset(size_t start_offset)
      * 4. Text layout drawing
      * ===================================================== */
     const int left_margin = 0;
-    const int max_x = EPD_7IN5_V2_WIDTH ;
+    const int max_x = EPD_7IN5_V2_WIDTH;
 
     const int lh_en = Font16.Height;
     const int lh_cn = Font12CN.Height;
 
-    int y = CONTENT_Y_START+HEADER_HEIGHT +10 ;
-    const int text_bottom = EPD_7IN5_V2_HEIGHT - CONTENT_Y_START+10 ;
+    // 修改：修正内容区域起始Y坐标，确保与页脚有足够的间距
+    int y = CONTENT_Y_START + 10;
+    const int text_bottom = FOOTER_Y_START-5; // 调整为-5，确保与页脚有足够的间距
 
     // Use processed text
     size_t i = start_offset;
@@ -611,7 +621,7 @@ size_t display_txt_page_from_offset(size_t start_offset)
 
             y += lh;
         }
-        
+
         // If no progress was made in the loop (i did not increase), break to prevent infinite loop
         if (i == initial_i && i < g_processed_text_size) {
             // Skip one character to prevent infinite loop
@@ -627,7 +637,16 @@ size_t display_txt_page_from_offset(size_t start_offset)
             }
         }
     }
-
+    if (y < FOOTER_Y_START) {
+            Paint_ClearWindows(
+                0,
+                y,
+                EPD_7IN5_V2_WIDTH,
+                FOOTER_Y_START,
+                BLACK
+            );
+    }
+        
     /* =====================================================
      * 5. Footer: Page number (using accurate page count calculation)
      * ===================================================== */
@@ -639,20 +658,10 @@ size_t display_txt_page_from_offset(size_t start_offset)
             0,
             0,  // 从顶部开始，包括Header
             EPD_7IN5_V2_WIDTH,
-            EPD_7IN5_V2_HEIGHT  // 刷新整个屏幕高度
+            EPD_7IN5_V2_HEIGHT // 刷新整个屏幕高度
         );
         screen_off_recovering = 0;
-    } else {
-        // 常规翻页：只刷新内容+页脚区域
-        EPD_7IN5_V2_Display_Part(
-            g_frame_buffer,
-            0,
-            CONTENT_Y_START,
-            EPD_7IN5_V2_WIDTH,
-            EPD_7IN5_V2_HEIGHT - CONTENT_Y_START
-        );
-    }
-
+    } 
     // Use accurate page count calculation
     int cur_page = get_current_page_index(start_offset);
     int total_pages_calc = total_pages > 0 ? total_pages : (g_processed_text_size / 2000) + 1;
@@ -662,7 +671,7 @@ size_t display_txt_page_from_offset(size_t start_offset)
 
     Paint_DrawString_EN(
         EPD_7IN5_V2_WIDTH - 160,
-        EPD_7IN5_V2_HEIGHT - CONTENT_Y_START + 20,  // Move page number down 10 pixels
+        FOOTER_Y_START+10,  // 调整页码Y坐标，避免与内容重叠
         page,
         &Font16,
         BLACK,
@@ -672,13 +681,13 @@ size_t display_txt_page_from_offset(size_t start_offset)
     /* =====================================================
      * 6. Partial refresh (CONTENT + FOOTER only)
      * ===================================================== */
-        EPD_7IN5_V2_Display_Part(
-            g_frame_buffer,
-            0,
-            CONTENT_Y_START,
-            EPD_7IN5_V2_WIDTH,
-            EPD_7IN5_V2_HEIGHT - CONTENT_Y_START
-        );
+    EPD_7IN5_V2_Display_Part(
+        g_frame_buffer,
+        0,
+        CONTENT_Y_START,
+        EPD_7IN5_V2_WIDTH,
+        EPD_7IN5_V2_HEIGHT - CONTENT_Y_START
+    );
 
     return i;  // Return actual ending offset
 }
@@ -694,12 +703,12 @@ void enter_screen_off_mode() {
     Paint_Clear(WHITE);
     
     // Display screen-off image using GUI_ReadBmp function
-    GUI_ReadBmp_Scale_Centered("./src/c/pic/2.bmp", 0, 0,EPD_7IN5_V2_WIDTH,EPD_7IN5_V2_HEIGHT,0.8) ;
+    GUI_ReadBmp_Scale_Centered("./src/c/pic/2.bmp", 0, 0,EPD_7IN5_V2_WIDTH,EPD_7IN5_V2_HEIGHT,0.7) ;
     
     // Display screen-off image
     EPD_7IN5_V2_Init_Fast();
     EPD_7IN5_V2_Display(g_frame_buffer);
-    EPD_7IN5_V2_Sleep(); // Enter sleep mode to save power
+    // EPD_7IN5_V2_Sleep(); // Enter sleep mode to save power
 }
 
 // Exit screen-off mode (optimized version)

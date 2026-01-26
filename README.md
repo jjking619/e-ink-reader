@@ -10,6 +10,37 @@
 
 ![界面预览](assets/main_reader.png)
 
+## 目录结构
+
+```
+e-ink-reader/
+├── README.md                 # 项目说明文档
+├── README_en.md             # 英文版说明文档
+├── startup.sh               # 项目启动脚本
+├── main.py                  # 主程序入口文件
+├── requirements.txt         # Python依赖包列表
+├── assets/                  # 存放项目图片资源
+│   └── main_reader.png      # 主界面预览图
+├── lg-master/               # LGPIO库源码目录
+│   ├── README               # LGPIO库说明文档
+│   ├── Makefile             # LGPIO库编译文件
+│   ├── lgpio.h              # LGPIO库头文件
+│   ├── lgpio.c              # LGPIO库实现文件
+│   ├── PY_LGPIO/            # Python LGPIO模块
+│   ├── PY_RGPIO/            # Python RGPIO模块
+│   └── ...                  # 其他LGPIO库相关文件
+├── src/
+│   ├── c/                   # C语言驱动源码目录
+│   │   ├── Makefile         # C程序编译文件
+│   │   ├── lib/             # 驱动库文件目录
+│   │   ├── examples/        # 示例程序目录
+│   │   ├── pic/             # 图片资源目录
+│   │   └── list.txt         # 屏幕型号对应表
+│   └── tools/
+│       └── books/           # 存放书籍文件的目录
+
+```
+
 ## 🌟 核心功能特性
 
 | 功能项 | 描述 |
