@@ -141,6 +141,14 @@ void init_eye_control_device() {
     printf("Warning: Failed to connect to eye control device after %d attempts\n", max_attempts);
 }
 
+static inline int utf8_char_len(unsigned char c) {
+    if (c < 0x80) return 1;
+    if ((c & 0xE0) == 0xC0) return 2;
+    if ((c & 0xF0) == 0xE0) return 3;
+    if ((c & 0xF8) == 0xF0) return 4;
+    return 1;
+}
+
 // Process text content: merge paragraphs, remove extra line breaks
 char* process_text_content(const char* raw_text, size_t raw_size) {
     if (!raw_text || raw_size == 0) return NULL;
@@ -196,14 +204,7 @@ char* process_text_content(const char* raw_text, size_t raw_size) {
 
             // Copy characters
             unsigned char c = (unsigned char)raw_text[src_idx];
-            int bytes = 1;
-            // Detect Chinese characters (high byte greater than 0x80)
-            if (c > 0x80 && src_idx + 1 < raw_size) {
-                // Check if next byte is a valid low byte
-                if ((unsigned char)raw_text[src_idx+1] > 0x40) {
-                    bytes = 2;
-                }
-            }
+            int bytes = utf8_char_len(c);
 
             // Copy character (skip extra spaces within paragraph)
             if (c == ' ' && in_paragraph && dst_idx > 0 && processed[dst_idx-1] == ' ') {
@@ -262,15 +263,14 @@ void calculate_page_info() {
         temp_offsets[count++] = offset;
         
         // Use same display logic to calculate how many characters fit on one page
-        const int left_margin = 10;
-        const int right_margin = 10;
-        const int max_x = EPD_7IN5_V2_WIDTH - right_margin;
+        const int left_margin = 0;
+        const int max_x = EPD_7IN5_V2_WIDTH ;
         
         const int lh_en = Font16.Height;
         const int lh_cn = Font12CN.Height;
         
-        int y = CONTENT_Y_START+HEADER_HEIGHT +10 ;
-        const int text_bottom = FOOTER_Y_START - 10;
+        int y = CONTENT_Y_START + 10;
+        const int text_bottom = FOOTER_Y_START - 5;
 
         // Calculate content for one page
         int page_has_content = 0; // Flag to mark if this page has content
@@ -290,20 +290,15 @@ void calculate_page_info() {
                     continue;  // Continue to next iteration
                 }
 
-                int bytes = 1;
-                // Detect Chinese characters (high byte greater than 0x80)
-                if (c > 0x80 && offset + 1 < g_processed_text_size) {
-                    if ((unsigned char)g_processed_text[offset+1] > 0x40) {
-                        bytes = 2;
-                    }
-                }
+                // 使用统一的UTF-8字符长度检测
+                int bytes = utf8_char_len(c);
 
-                int width = (bytes == 2) ? Font12CN.Width : Font16.Width;
+                int width = (bytes > 1) ? Font12CN.Width : Font16.Width;
 
                 if (x + width > max_x)
                     break;  // Reached line width limit, move to next line
 
-                if (bytes == 2) has_cn = 1;
+                if (bytes > 1) has_cn = 1;
                 offset += bytes;
                 x += width;
             }
@@ -537,12 +532,12 @@ size_t display_txt_page_from_offset(size_t start_offset)
          * 3. Page turning: Only clear CONTENT + FOOTER (not Header)
          *    But skip during screen-off recovery
          * ================================================= */
-     Paint_ClearWindows(
+        Paint_ClearWindows(
             0,
             CONTENT_Y_START,
-            EPD_7IN5_V2_WIDTH-10,
-            EPD_7IN5_V2_HEIGHT - CONTENT_Y_START,
-            WHITE
+            EPD_7IN5_V2_WIDTH,
+            EPD_7IN5_V2_HEIGHT,
+            BLACK
         );
     }
 
@@ -582,22 +577,10 @@ size_t display_txt_page_from_offset(size_t start_offset)
                 continue;  // Continue to next iteration
             }
 
-            int bytes = 1;
-            // Detect Chinese characters (high byte greater than 0x80)
-            if (c > 0x80 && i + 1 < g_processed_text_size) {
-                if ((unsigned char)g_processed_text[i+1] > 0x40) {
-                    bytes = 2;
-                }
-            } else if (c > 0x80 && i + 2 < g_processed_text_size) {
-                // Check if this is a three-byte UTF-8 character (Chinese character)
-                if (((unsigned char)g_processed_text[i] & 0xE0) == 0xE0) {
-                    bytes = 3;
-                }
-            }
+            // 修改：使用统一的UTF-8字符长度检测
+            int bytes = utf8_char_len(c);
 
-            int width = (bytes == 1) ? Font16.Width : 
-                       (bytes == 2) ? Font12CN.Width : 
-                       Font12CN.Width; // Treat three-byte UTF-8 characters as Chinese character width
+            int width = (bytes > 1) ? Font12CN.Width : Font16.Width;
 
             if (x + width > max_x)
                 break;  // Reached line width limit, move to next line
@@ -628,15 +611,8 @@ size_t display_txt_page_from_offset(size_t start_offset)
         if (i == initial_i && i < g_processed_text_size) {
             // Skip one character to prevent infinite loop
             unsigned char c = (unsigned char)g_processed_text[i];
-            if (c > 0x80 && i + 1 < g_processed_text_size) {
-                if ((unsigned char)g_processed_text[i+1] > 0x40) {
-                    i += 2;  // Skip double-byte character
-                } else {
-                    i += 1;  // Skip single byte
-                }
-            } else {
-                i += 1;  // Skip single byte
-            }
+            int char_bytes = utf8_char_len(c);
+            i += char_bytes;  // Skip the character based on UTF-8 length
         }
     }
     if (y < FOOTER_Y_START) {
@@ -731,6 +707,7 @@ void exit_screen_off_mode() {
 
     // Use fast recovery: directly refresh current page
     if (g_frame_buffer && g_processed_text) {
+        Paint_SelectImage(g_frame_buffer);  // 重新选择图像缓冲区
         display_txt_page_from_offset(g_current_char_offset);
     }
     
@@ -745,7 +722,7 @@ void exit_screen_off_mode() {
     // Activate anti-flicker protection for 1.5 seconds
     struct timeval tv;
     gettimeofday(&tv, NULL);
-    anti_flicker_until = tv.tv_sec + 1; // Protection for 1 second (tv.tv_sec is unix timestamp)
+    anti_flicker_until = tv.tv_sec + 2; // Protection for 1 second (tv.tv_sec is unix timestamp)
 }
 
 // Function to safely truncate filename for display
@@ -787,7 +764,7 @@ void next_book() {
         snprintf(current_file, sizeof(current_file), "%s", book_list[current_book_index]);
         if (load_txt_file(current_file) == 0) {
             g_current_char_offset = 0;
-            display_txt_page_from_offset(0);
+            g_current_char_offset = display_txt_page_from_offset(0);  // 更新当前偏移量
             // Start of new book, clear history, push first page
             history_top = -1;
             if (history_top < MAX_HISTORY - 1) {
@@ -796,6 +773,7 @@ void next_book() {
             // Reset title flag to redraw title when switching to new book
             title_drawn = 0;
             current_page_index = 1;  // Reset to first page
+            book_changed = 1;  // 标记书籍已更改
             printf("Switched to book [%d]: %s\n", current_book_index, current_file);
         }
     }
@@ -808,7 +786,7 @@ void prev_book() {
         snprintf(current_file, sizeof(current_file), "%s", book_list[current_book_index]);
         if (load_txt_file(current_file) == 0) {
             g_current_char_offset = 0;
-            display_txt_page_from_offset(0);
+            g_current_char_offset = display_txt_page_from_offset(0);  // 更新当前偏移量
             // Start of new book, clear history, push first page
             history_top = -1;
             if (history_top < MAX_HISTORY - 1) {
@@ -817,6 +795,7 @@ void prev_book() {
             // Reset title flag to redraw title when switching to new book
             title_drawn = 0;
             current_page_index = 1;  // Reset to first page
+            book_changed = 1;  // 标记书籍已更改
             printf("Switched to book [%d]: %s\n", current_book_index, current_file);
         }
     }
@@ -1077,10 +1056,9 @@ void EPD_7in5_V2_reader_txt(void) {
     }
     Paint_NewImage(g_frame_buffer, EPD_7IN5_V2_WIDTH, EPD_7IN5_V2_HEIGHT, ROTATE_180, WHITE);
 
-    // Display first page
+    // Display first page - 确保首次显示正确
     g_current_char_offset = 0;  // Ensure starting from the beginning of the text
-    size_t next_offset = display_txt_page_from_offset(g_current_char_offset);
-    g_current_char_offset = next_offset;  // Update g_current_char_offset to start of next page
+    g_current_char_offset = display_txt_page_from_offset(g_current_char_offset);  // 更新当前偏移量为下一页的起始位置
     // Push first page history (to allow backing to start)
     if (history_top < MAX_HISTORY - 1) {
         history_stack[++history_top] = 0;  // Store the starting offset of the first page
