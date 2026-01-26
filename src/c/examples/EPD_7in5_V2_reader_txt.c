@@ -50,6 +50,8 @@ void exit_screen_off_mode();
 static int screen_off = 0;  // Whether currently in screen-off state
 // 添加全局变量来跟踪息屏状态
 static int screen_off_recovering = 0;
+// 添加防误触变量
+static int anti_flicker_until = 0;  // Unix timestamp until which anti-flicker is active
 
 static char current_file[2048] = {0};  // Reasonable size for file path
 static UBYTE *g_frame_buffer = NULL;
@@ -269,7 +271,7 @@ void calculate_page_info() {
         
         int y = CONTENT_Y_START+HEADER_HEIGHT +10 ;
         const int text_bottom = FOOTER_Y_START - 10;
-        
+
         // Calculate content for one page
         int page_has_content = 0; // Flag to mark if this page has content
         
@@ -739,6 +741,11 @@ void exit_screen_off_mode() {
     if (eye_key_fd >= 0) {
         while (read(eye_key_fd, &ev, sizeof(ev)) == sizeof(ev)) {}
     }
+    
+    // Activate anti-flicker protection for 1.5 seconds
+    struct timeval tv;
+    gettimeofday(&tv, NULL);
+    anti_flicker_until = tv.tv_sec + 1; // Protection for 1 second (tv.tv_sec is unix timestamp)
 }
 
 // Function to safely truncate filename for display
@@ -827,6 +834,17 @@ static KeyState key_states[3] = {0}; // Index 0 unused, 1=KEY1, 2=KEY2
 // New: Key event handling function
 void handle_key_event(int key_id, struct input_event *ev) {
     if (ev->type != EV_KEY) return;
+    
+    // Check if currently in anti-flicker mode (within 1.5 seconds after screen-on)
+    struct timeval current_time;
+    gettimeofday(&current_time, NULL);
+    if (current_time.tv_sec < anti_flicker_until) {
+        // In anti-flicker mode, only allow screen-off events to pass through
+        if (!(ev->code == CUSTOM_SCREEN_OFF_BTN)) {
+            printf("Anti-flicker protection active, ignoring key event\n");
+            return;
+        }
+    }
 
     // New: Print actual received key codes for debugging
     printf("Received key event: id=%d, code=%d, value=%d\n", key_id, ev->code, ev->value);
@@ -1060,12 +1078,12 @@ void EPD_7in5_V2_reader_txt(void) {
     Paint_NewImage(g_frame_buffer, EPD_7IN5_V2_WIDTH, EPD_7IN5_V2_HEIGHT, ROTATE_180, WHITE);
 
     // Display first page
-    g_current_char_offset = 0;
+    g_current_char_offset = 0;  // Ensure starting from the beginning of the text
     size_t next_offset = display_txt_page_from_offset(g_current_char_offset);
     g_current_char_offset = next_offset;  // Update g_current_char_offset to start of next page
     // Push first page history (to allow backing to start)
     if (history_top < MAX_HISTORY - 1) {
-        history_stack[++history_top] = 0;
+        history_stack[++history_top] = 0;  // Store the starting offset of the first page
     }
 
     printf("Reader started. Books: %d\n", book_count);
