@@ -122,7 +122,7 @@ int find_eye_control_device() {
 // Initialize virtual device with retry mechanism
 void init_eye_control_device() {
     int attempts = 0;
-    const int max_attempts = 10; // Try 10 times with 1 second intervals
+    const int max_attempts = 5; // Try 5 times with 1 second intervals
     
     printf("Waiting for eye control device...\n");
     
@@ -535,7 +535,7 @@ size_t display_txt_page_from_offset(size_t start_offset)
         }
 
         snprintf(title, sizeof(title), "Book: %s", display_name);
-        Paint_DrawString_EN(10, 10, title, &Font16, BLACK, WHITE);
+        Paint_DrawString_EN(10, 10, title, &Font16, WHITE,BLACK);
 
         Paint_DrawLine(
             10,
@@ -561,11 +561,11 @@ size_t display_txt_page_from_offset(size_t start_offset)
          *    包括息屏恢复时需要重绘Header的情况
          * ===================================================== */
         // 清除Header区域
-        Paint_ClearWindows(0, 0, EPD_7IN5_V2_WIDTH, HEADER_HEIGHT + 8, WHITE);
+        // Paint_ClearWindows(0, 0, EPD_7IN5_V2_WIDTH, HEADER_HEIGHT + 5, WHITE);
         // 新增：清除内容区域和页脚区域
         Paint_ClearWindows(
             0,
-            CONTENT_Y_START,
+            0,
             EPD_7IN5_V2_WIDTH,
             EPD_7IN5_V2_HEIGHT,
             BLACK
@@ -590,7 +590,7 @@ size_t display_txt_page_from_offset(size_t start_offset)
             HEADER_HEIGHT,
             EPD_7IN5_V2_WIDTH - 10,
             HEADER_HEIGHT,
-            BLACK,
+            WHITE,
             DOT_PIXEL_1X1,
             LINE_STYLE_SOLID
         );
@@ -776,7 +776,7 @@ void exit_screen_off_mode() {
     // Activate anti-flicker protection for 1.5 seconds
     struct timeval tv;
     gettimeofday(&tv, NULL);
-    anti_flicker_until = tv.tv_sec + 2; // Protection for 1 second (tv.tv_sec is unix timestamp)
+    anti_flicker_until = tv.tv_sec + 1; // Protection for 1 second (tv.tv_sec is unix timestamp)
 }
 
 // Function to safely truncate filename for display
