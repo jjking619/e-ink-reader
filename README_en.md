@@ -6,7 +6,7 @@
 
 This project is a smart e-ink screen reader based on the Quectel Pi H1 Smart Single-Board Computer. The system combines the low-power display characteristics of e-ink screens with camera-based eye-tracking technology to achieve a natural page-turning reading experience without manual operation. Page turning is controlled by detecting changes in the user's eye gaze, and physical buttons are used as auxiliary input to improve system reliability.
 
-In terms of display, the system adopts a partial refresh and partitioned rendering strategy, supporting automatic formatting and continuous reading of mixed Chinese and English text. It also features page memory and quick wake-up functions, making it suitable for long-term reading and embedded smart terminal applications.
+In terms of display, the system adopts a partial refresh and partition rendering strategy, supports automatic typesetting and continuous reading of Chinese and English text, and also has page memory and quick wake-up functions, making it suitable for long-term reading and embedded smart terminal application scenarios.
 
 ![Interface Preview](assets/main_reader.png)
 

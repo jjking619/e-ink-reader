@@ -492,13 +492,13 @@ size_t display_txt_page_from_offset(size_t start_offset)
          *    包括息屏恢复时需要重绘Header的情况
          * ===================================================== */
         // 清除Header区域
-        Paint_ClearWindows(0, 0, EPD_7IN5_V2_WIDTH, HEADER_HEIGHT + 8, WHITE);
+        Paint_ClearWindows(0, 0, EPD_7IN5_V2_WIDTH, HEADER_HEIGHT + 8, BLACK);
         // 新增：清除内容区域和页脚区域
         Paint_ClearWindows(
             0,
             CONTENT_Y_START,
             EPD_7IN5_V2_WIDTH,
-            EPD_7IN5_V2_HEIGHT ,
+            EPD_7IN5_V2_HEIGHT,
             BLACK
         );
       
@@ -536,7 +536,7 @@ size_t display_txt_page_from_offset(size_t start_offset)
             0,
             CONTENT_Y_START,
             EPD_7IN5_V2_WIDTH,
-            EPD_7IN5_V2_HEIGHT,
+            EPD_7IN5_V2_HEIGHT-CONTENT_Y_START,
             BLACK
         );
     }
@@ -625,21 +625,7 @@ size_t display_txt_page_from_offset(size_t start_offset)
             );
     }
         
-    /* =====================================================
-     * 5. Footer: Page number (using accurate page count calculation)
-     * ===================================================== */
-    // Only clear footer if not in screen-off recovery
-    if (screen_off_recovering) {
-        // 息屏恢复时：刷新整个屏幕（包括Header）
-        EPD_7IN5_V2_Display_Part(
-            g_frame_buffer,
-            0,
-            0,  // 从顶部开始，包括Header
-            EPD_7IN5_V2_WIDTH,
-            EPD_7IN5_V2_HEIGHT // 刷新整个屏幕高度
-        );
-        screen_off_recovering = 0;
-    } 
+
     // Use accurate page count calculation
     int cur_page = get_current_page_index(start_offset);
     int total_pages_calc = total_pages > 0 ? total_pages : (g_processed_text_size / 2000) + 1;
@@ -649,24 +635,20 @@ size_t display_txt_page_from_offset(size_t start_offset)
 
     Paint_DrawString_EN(
         EPD_7IN5_V2_WIDTH - 160,
-        FOOTER_Y_START+10,  // 调整页码Y坐标，避免与内容重叠
+        FOOTER_Y_START+5,  // 调整页码Y坐标，避免与内容重叠
         page,
         &Font16,
         BLACK,
         WHITE
     );
 
-    /* =====================================================
-     * 6. Partial refresh (CONTENT + FOOTER only)
-     * ===================================================== */
-    EPD_7IN5_V2_Display_Part(
-        g_frame_buffer,
-        0,
-        CONTENT_Y_START,
-        EPD_7IN5_V2_WIDTH,
-        EPD_7IN5_V2_HEIGHT - CONTENT_Y_START
-    );
-
+        EPD_7IN5_V2_Display_Part(
+                g_frame_buffer,
+                0,
+                0,  // 从顶部开始，包括Header
+                EPD_7IN5_V2_WIDTH,
+                EPD_7IN5_V2_HEIGHT // 刷新整个屏幕高度
+            );
     return i;  // Return actual ending offset
 }
 
@@ -706,8 +688,12 @@ void exit_screen_off_mode() {
     header_drawn = 0;  // 仅标记header需要重绘，由display_txt_page_from_offset统一处理
 
     // Use fast recovery: directly refresh current page
-    if (g_frame_buffer && g_processed_text) {
+      if (g_frame_buffer && g_processed_text) {
         Paint_SelectImage(g_frame_buffer);  // 重新选择图像缓冲区
+        // 确保清空整个屏幕缓冲区，包括Header区域
+        Paint_Clear(WHITE);
+        
+        // 直接调用display_txt_page_from_offset，它会根据header_drawn=0重新绘制Header
         display_txt_page_from_offset(g_current_char_offset);
     }
     
