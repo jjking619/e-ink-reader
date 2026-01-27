@@ -141,6 +141,7 @@ void init_eye_control_device() {
     printf("Warning: Failed to connect to eye control device after %d attempts\n", max_attempts);
 }
 
+// 新增：UTF-8字符长度检测函数
 static inline int utf8_char_len(unsigned char c) {
     if (c < 0x80) return 1;
     if ((c & 0xE0) == 0xC0) return 2;
@@ -148,6 +149,65 @@ static inline int utf8_char_len(unsigned char c) {
     if ((c & 0xF8) == 0xF0) return 4;
     return 1;
 }
+
+// 新增：GB2312字符长度检测函数
+static inline int gb2312_char_len(const char* text, size_t size, size_t pos) {
+    if (pos >= size) return 1;
+    unsigned char c = (unsigned char)text[pos];
+    // GB2312规范：首字节≥0x80且次字节≥0x40
+    if (c >= 0x80 && pos + 1 < size && (unsigned char)text[pos + 1] >= 0x40) {
+        return 2;
+    }
+    return 1;
+}
+
+// 新增：文件编码检测函数
+static int detect_file_encoding(const char* data, size_t size) {
+    // 检查BOM标记
+    if (size >= 3 && data[0] == 0xEF && data[1] == 0xBB && data[2] == 0xBF) {
+        return 1; // UTF-8 with BOM
+    }
+
+    // 检查是否有明显的GB2312特征（双字节字符）
+    for (size_t i = 0; i < size && i < 1024; i++) {
+        unsigned char c = (unsigned char)data[i];
+        if (c >= 0x80) {
+            // 检查是否符合GB2312规范：首字节≥0x80且次字节≥0x40
+            if (i + 1 < size && (unsigned char)data[i+1] >= 0x40) {
+                return 0; // Likely GB2312
+            }
+            // 如果是UTF-8，应该符合UTF-8编码规则
+            else if ((c & 0xE0) == 0xC0 && i + 1 < size) {
+                return 1; // UTF-8
+            }
+            else if ((c & 0xF0) == 0xE0 && i + 2 < size) {
+                return 1; // UTF-8
+            }
+            else if ((c & 0xF8) == 0xF0 && i + 3 < size) {
+                return 1; // UTF-8
+            }
+        }
+    }
+
+    return 1; // 默认使用UTF-8（英文文本）
+}
+
+// 修改：添加UTF-8字符长度检测的辅助函数，保持接口一致性
+static inline int utf8_char_len_pos(const char* text, size_t size, size_t pos) {
+    if (pos >= size) return 1;
+    return utf8_char_len((unsigned char)text[pos]);
+}
+
+// 新增：字符处理器结构
+typedef int (*char_length_func)(const char*, size_t, size_t);
+
+typedef struct {
+    char_length_func char_len;
+    int is_gb2312;
+} CharProcessor;
+
+// 新增：全局字符处理器
+static CharProcessor char_processor = {gb2312_char_len, 1};
 
 // Process text content: merge paragraphs, remove extra line breaks
 char* process_text_content(const char* raw_text, size_t raw_size) {
@@ -204,7 +264,7 @@ char* process_text_content(const char* raw_text, size_t raw_size) {
 
             // Copy characters
             unsigned char c = (unsigned char)raw_text[src_idx];
-            int bytes = utf8_char_len(c);
+            int bytes = char_processor.char_len(raw_text, raw_size, src_idx);
 
             // Copy character (skip extra spaces within paragraph)
             if (c == ' ' && in_paragraph && dst_idx > 0 && processed[dst_idx-1] == ' ') {
@@ -290,8 +350,8 @@ void calculate_page_info() {
                     continue;  // Continue to next iteration
                 }
 
-                // 使用统一的UTF-8字符长度检测
-                int bytes = utf8_char_len(c);
+                // 修改：使用动态字符长度检测
+                int bytes = char_processor.char_len(g_processed_text, g_processed_text_size, offset);
 
                 int width = (bytes > 1) ? Font12CN.Width : Font16.Width;
 
@@ -399,6 +459,15 @@ int load_txt_file(const char* path) {
     }
     g_full_text[read_bytes] = '\0';
     g_text_size = read_bytes;
+
+    // 新增：检测文件编码
+    int is_gb2312 = detect_file_encoding(g_full_text, g_text_size);
+    char_processor.char_len = is_gb2312 ? 
+        (int (*)(const char*, size_t, size_t))gb2312_char_len : 
+        utf8_char_len_pos;
+    char_processor.is_gb2312 = is_gb2312;
+    
+    printf("Detected file encoding: %s\n", is_gb2312 ? "GB2312" : "UTF-8");
 
     // Process text: remove extra line breaks, merge paragraphs
     if (g_processed_text) free(g_processed_text);
@@ -577,8 +646,8 @@ size_t display_txt_page_from_offset(size_t start_offset)
                 continue;  // Continue to next iteration
             }
 
-            // 修改：使用统一的UTF-8字符长度检测
-            int bytes = utf8_char_len(c);
+            // 修改：使用带边界检查的字符长度检测
+            int bytes = char_processor.char_len(g_processed_text, g_processed_text_size, i);
 
             int width = (bytes > 1) ? Font12CN.Width : Font16.Width;
 
@@ -600,7 +669,7 @@ size_t display_txt_page_from_offset(size_t start_offset)
 
             line[len] = '\0';
             if (has_cn)
-                Paint_DrawString_CN(left_margin, y, line, &Font12CN, BLACK, WHITE);
+                Paint_DrawString_CN(left_margin, y, line, &Font12CN, WHITE,BLACK);
             else
                 Paint_DrawString_EN(left_margin, y, line, &Font16, BLACK, WHITE);
 
@@ -610,9 +679,8 @@ size_t display_txt_page_from_offset(size_t start_offset)
         // If no progress was made in the loop (i did not increase), break to prevent infinite loop
         if (i == initial_i && i < g_processed_text_size) {
             // Skip one character to prevent infinite loop
-            unsigned char c = (unsigned char)g_processed_text[i];
-            int char_bytes = utf8_char_len(c);
-            i += char_bytes;  // Skip the character based on UTF-8 length
+            int char_bytes = char_processor.char_len(g_processed_text, g_processed_text_size, i);
+            i += char_bytes;  // Skip the character based on detected encoding
         }
     }
     if (y < FOOTER_Y_START) {
