@@ -33,7 +33,7 @@
 #define HEADER_HEIGHT   30
 #define FOOTER_HEIGHT   30  // Increase footer height to provide space for page numbers
 
-#define CONTENT_Y_START   (HEADER_HEIGHT + 10)
+#define CONTENT_Y_START   (HEADER_HEIGHT + 5)  // 减少内容区域起始位置的边距
 #define FOOTER_Y_START    (EPD_7IN5_V2_HEIGHT - FOOTER_HEIGHT)
 
 // Function declarations
@@ -87,7 +87,7 @@ static int title_drawn = 0;
 // New: Used for accurate calculation of current page number
 static size_t *page_offsets = NULL;  // Store starting offset of each page
 static int total_pages = 0;          // Total number of pages
-static int current_page_index = 0;   // Current page index (starting from 0)
+static int current_page_index = 0;
 
 
 const char* get_ext(const char* filename) {
@@ -561,7 +561,7 @@ size_t display_txt_page_from_offset(size_t start_offset)
          *    包括息屏恢复时需要重绘Header的情况
          * ===================================================== */
         // 清除Header区域
-        Paint_ClearWindows(0, 0, EPD_7IN5_V2_WIDTH, HEADER_HEIGHT + 8, BLACK);
+        Paint_ClearWindows(0, 0, EPD_7IN5_V2_WIDTH, HEADER_HEIGHT + 8, WHITE);
         // 新增：清除内容区域和页脚区域
         Paint_ClearWindows(
             0,
@@ -620,7 +620,7 @@ size_t display_txt_page_from_offset(size_t start_offset)
     const int lh_cn = Font12CN.Height;
 
     // 修改：修正内容区域起始Y坐标，确保与页脚有足够的间距
-    int y = CONTENT_Y_START + 10;
+    int y = CONTENT_Y_START;  // 移除了+10的额外边距，让文本更靠近顶部
     const int text_bottom = FOOTER_Y_START-5; // 调整为-5，确保与页脚有足够的间距
 
     // Use processed text
