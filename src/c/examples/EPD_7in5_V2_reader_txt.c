@@ -759,7 +759,6 @@ void next_book() {
             // Reset title flag to redraw title when switching to new book
             title_drawn = 0;
             current_page_index = 1;  // Reset to first page
-            book_changed = 1;  // 标记书籍已更改
             printf("Switched to book [%d]: %s\n", current_book_index, current_file);
         }
     }
@@ -781,7 +780,6 @@ void prev_book() {
             // Reset title flag to redraw title when switching to new book
             title_drawn = 0;
             current_page_index = 1;  // Reset to first page
-            book_changed = 1;  // 标记书籍已更改
             printf("Switched to book [%d]: %s\n", current_book_index, current_file);
         }
     }
