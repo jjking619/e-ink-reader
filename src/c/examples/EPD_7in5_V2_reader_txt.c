@@ -122,7 +122,7 @@ int find_eye_control_device() {
 // Initialize virtual device with retry mechanism
 void init_eye_control_device() {
     int attempts = 0;
-    const int max_attempts = 5; // Try 5 times with 1 second intervals
+    const int max_attempts = 2; // Try 5 times with 1 second intervals
     
     printf("Waiting for eye control device...\n");
     
@@ -546,7 +546,6 @@ size_t display_txt_page_from_offset(size_t start_offset)
             DOT_PIXEL_1X1,
             LINE_STYLE_SOLID
         );
-        EPD_7IN5_V2_Init_Fast();
         EPD_7IN5_V2_Clear();
         EPD_7IN5_V2_Display(g_frame_buffer);
         EPD_7IN5_V2_Init_Part();
@@ -711,12 +710,12 @@ size_t display_txt_page_from_offset(size_t start_offset)
     );
 
         EPD_7IN5_V2_Display_Part(
-                g_frame_buffer,
-                0,
+            g_frame_buffer,
+            0,
                 0,  // 从顶部开始，包括Header
-                EPD_7IN5_V2_WIDTH,
+            EPD_7IN5_V2_WIDTH,
                 EPD_7IN5_V2_HEIGHT // 刷新整个屏幕高度
-            );
+        );
     return i;  // Return actual ending offset
 }
 
@@ -734,7 +733,7 @@ void enter_screen_off_mode() {
     GUI_ReadBmp_Scale_Centered("./src/c/pic/2.bmp", 0, 0,EPD_7IN5_V2_WIDTH,EPD_7IN5_V2_HEIGHT,0.7) ;
     
     // Display screen-off image
-    EPD_7IN5_V2_Init_Fast();
+    // EPD_7IN5_V2_Init_Fast();
     EPD_7IN5_V2_Display(g_frame_buffer);
     // EPD_7IN5_V2_Sleep(); // Enter sleep mode to save power
 }
@@ -757,9 +756,9 @@ void exit_screen_off_mode() {
 
     // Use fast recovery: directly refresh current page
       if (g_frame_buffer && g_processed_text) {
-        Paint_SelectImage(g_frame_buffer);  // 重新选择图像缓冲区
-        // 确保清空整个屏幕缓冲区，包括Header区域
-        Paint_Clear(WHITE);
+        // Paint_SelectImage(g_frame_buffer);  // 重新选择图像缓冲区
+        // // 确保清空整个屏幕缓冲区，包括Header区域
+        // Paint_Clear(WHITE);
         
         // 直接调用display_txt_page_from_offset，它会根据header_drawn=0重新绘制Header
         display_txt_page_from_offset(g_current_char_offset);
