@@ -33,7 +33,7 @@
 #define HEADER_HEIGHT   30
 #define FOOTER_HEIGHT   30  // Increase footer height to provide space for page numbers
 
-#define CONTENT_Y_START   (HEADER_HEIGHT + 5)  // 减少内容区域起始位置的边距
+#define CONTENT_Y_START   (HEADER_HEIGHT + 5)  // Reduce margin at top of content area
 #define FOOTER_Y_START    (EPD_7IN5_V2_HEIGHT - FOOTER_HEIGHT)
 
 // Function declarations
@@ -48,9 +48,7 @@ void exit_screen_off_mode();
 
 // Screen-off related definitions
 static int screen_off = 0;  // Whether currently in screen-off state
-// 添加全局变量来跟踪息屏状态
-static int screen_off_recovering = 0;
-// 添加防误触变量
+// Add anti-flicker variable
 static int anti_flicker_until = 0;  // Unix timestamp until which anti-flicker is active
 
 static char current_file[2048] = {0};  // Reasonable size for file path
@@ -122,7 +120,7 @@ int find_eye_control_device() {
 // Initialize virtual device with retry mechanism
 void init_eye_control_device() {
     int attempts = 0;
-    const int max_attempts = 2; // Try 5 times with 1 second intervals
+    const int max_attempts = 5; // Try 5 times with 1 second intervals
     
     printf("Waiting for eye control device...\n");
     
@@ -141,7 +139,7 @@ void init_eye_control_device() {
     printf("Warning: Failed to connect to eye control device after %d attempts\n", max_attempts);
 }
 
-// 新增：UTF-8字符长度检测函数
+// Add: UTF-8 character length detection function
 static inline int utf8_char_len(unsigned char c) {
     if (c < 0x80) return 1;
     if ((c & 0xE0) == 0xC0) return 2;
@@ -150,33 +148,33 @@ static inline int utf8_char_len(unsigned char c) {
     return 1;
 }
 
-// 新增：GB2312字符长度检测函数
+// Add: GB2312 character length detection function
 static inline int gb2312_char_len(const char* text, size_t size, size_t pos) {
     if (pos >= size) return 1;
     unsigned char c = (unsigned char)text[pos];
-    // GB2312规范：首字节≥0x80且次字节≥0x40
+    // GB2312 specification: first byte ≥0x80 and second byte ≥0x40
     if (c >= 0x80 && pos + 1 < size && (unsigned char)text[pos + 1] >= 0x40) {
         return 2;
     }
     return 1;
 }
 
-// 新增：文件编码检测函数
+// Add: File encoding detection function
 static int detect_file_encoding(const char* data, size_t size) {
-    // 检查BOM标记
+    // Check BOM marker
     if (size >= 3 && data[0] == 0xEF && data[1] == 0xBB && data[2] == 0xBF) {
         return 1; // UTF-8 with BOM
     }
 
-    // 检查是否有明显的GB2312特征（双字节字符）
+    // Check for obvious GB2312 characteristics (double-byte characters)
     for (size_t i = 0; i < size && i < 1024; i++) {
         unsigned char c = (unsigned char)data[i];
         if (c >= 0x80) {
-            // 检查是否符合GB2312规范：首字节≥0x80且次字节≥0x40
+            // Check if it conforms to GB2312 specification: first byte ≥0x80 and second byte ≥0x40
             if (i + 1 < size && (unsigned char)data[i+1] >= 0x40) {
                 return 0; // Likely GB2312
             }
-            // 如果是UTF-8，应该符合UTF-8编码规则
+            // If it's UTF-8, it should conform to UTF-8 encoding rules
             else if ((c & 0xE0) == 0xC0 && i + 1 < size) {
                 return 1; // UTF-8
             }
@@ -189,16 +187,16 @@ static int detect_file_encoding(const char* data, size_t size) {
         }
     }
 
-    return 1; // 默认使用UTF-8（英文文本）
+    return 1; // Default to UTF-8 (English text)
 }
 
-// 修改：添加UTF-8字符长度检测的辅助函数，保持接口一致性
+// Modify: Add UTF-8 character length detection helper function, keeping interface consistent
 static inline int utf8_char_len_pos(const char* text, size_t size, size_t pos) {
     if (pos >= size) return 1;
     return utf8_char_len((unsigned char)text[pos]);
 }
 
-// 新增：字符处理器结构
+// Add: Character processor structure
 typedef int (*char_length_func)(const char*, size_t, size_t);
 
 typedef struct {
@@ -206,7 +204,7 @@ typedef struct {
     int is_gb2312;
 } CharProcessor;
 
-// 新增：全局字符处理器
+// Add: Global character processor
 static CharProcessor char_processor = {gb2312_char_len, 1};
 
 // Process text content: merge paragraphs, remove extra line breaks
@@ -350,7 +348,7 @@ void calculate_page_info() {
                     continue;  // Continue to next iteration
                 }
 
-                // 修改：使用动态字符长度检测
+                // Modify: Use dynamic character length detection
                 int bytes = char_processor.char_len(g_processed_text, g_processed_text_size, offset);
 
                 int width = (bytes > 1) ? Font12CN.Width : Font16.Width;
@@ -460,7 +458,7 @@ int load_txt_file(const char* path) {
     g_full_text[read_bytes] = '\0';
     g_text_size = read_bytes;
 
-    // 新增：检测文件编码
+    // Add: Detect file encoding
     int is_gb2312 = detect_file_encoding(g_full_text, g_text_size);
     char_processor.char_len = is_gb2312 ? 
         (int (*)(const char*, size_t, size_t))gb2312_char_len : 
@@ -546,6 +544,7 @@ size_t display_txt_page_from_offset(size_t start_offset)
             DOT_PIXEL_1X1,
             LINE_STYLE_SOLID
         );
+        EPD_7IN5_V2_Init_Fast();
         EPD_7IN5_V2_Clear();
         EPD_7IN5_V2_Display(g_frame_buffer);
         EPD_7IN5_V2_Init_Part();
@@ -557,11 +556,11 @@ size_t display_txt_page_from_offset(size_t start_offset)
     else if (!header_drawn) {
         /* =================================================
          * 2. Ensure Header area always exists
-         *    包括息屏恢复时需要重绘Header的情况
+         *    Including cases where header needs to be redrawn after screen-off recovery
          * ===================================================== */
-        // 清除Header区域
+        // Clear header area
         // Paint_ClearWindows(0, 0, EPD_7IN5_V2_WIDTH, HEADER_HEIGHT + 5, WHITE);
-        // 新增：清除内容区域和页脚区域
+        // Add: Clear content area and footer area
         Paint_ClearWindows(
             0,
             0,
@@ -618,9 +617,9 @@ size_t display_txt_page_from_offset(size_t start_offset)
     const int lh_en = Font16.Height;
     const int lh_cn = Font12CN.Height;
 
-    // 修改：修正内容区域起始Y坐标，确保与页脚有足够的间距
-    int y = CONTENT_Y_START;  // 移除了+10的额外边距，让文本更靠近顶部
-    const int text_bottom = FOOTER_Y_START-5; // 调整为-5，确保与页脚有足够的间距
+    // Modify: Correct content area start Y coordinate to ensure sufficient spacing from footer
+    int y = CONTENT_Y_START;  // Removed +10 extra margin to bring text closer to top
+    const int text_bottom = FOOTER_Y_START-5; // Adjust to -5 to ensure sufficient spacing from footer
 
     // Use processed text
     size_t i = start_offset;
@@ -645,7 +644,7 @@ size_t display_txt_page_from_offset(size_t start_offset)
                 continue;  // Continue to next iteration
             }
 
-            // 修改：使用带边界检查的字符长度检测
+            // Modify: Use boundary-checked character length detection
             int bytes = char_processor.char_len(g_processed_text, g_processed_text_size, i);
 
             int width = (bytes > 1) ? Font12CN.Width : Font16.Width;
@@ -702,7 +701,7 @@ size_t display_txt_page_from_offset(size_t start_offset)
 
     Paint_DrawString_EN(
         EPD_7IN5_V2_WIDTH - 160,
-        FOOTER_Y_START+5,  // 调整页码Y坐标，避免与内容重叠
+        FOOTER_Y_START+5,  // Adjust page number Y coordinate to avoid overlapping with content
         page,
         &Font16,
         BLACK,
@@ -712,9 +711,9 @@ size_t display_txt_page_from_offset(size_t start_offset)
         EPD_7IN5_V2_Display_Part(
             g_frame_buffer,
             0,
-                0,  // 从顶部开始，包括Header
+            0,  // Starting from top, including Header
             EPD_7IN5_V2_WIDTH,
-                EPD_7IN5_V2_HEIGHT // 刷新整个屏幕高度
+            EPD_7IN5_V2_HEIGHT // Refresh entire screen height
         );
     return i;  // Return actual ending offset
 }
@@ -733,7 +732,6 @@ void enter_screen_off_mode() {
     GUI_ReadBmp_Scale_Centered("./src/c/pic/2.bmp", 0, 0,EPD_7IN5_V2_WIDTH,EPD_7IN5_V2_HEIGHT,0.7) ;
     
     // Display screen-off image
-    // EPD_7IN5_V2_Init_Fast();
     EPD_7IN5_V2_Display(g_frame_buffer);
     // EPD_7IN5_V2_Sleep(); // Enter sleep mode to save power
 }
@@ -744,28 +742,19 @@ void exit_screen_off_mode() {
 
     printf("Exiting screen off mode...\n");
     screen_off = 0;
-    screen_off_recovering = 1;  // Set recovery flag
-    
     // Fast wake up: only initialize partial refresh mode
     EPD_7IN5_V2_Init_Part();
     
     // Set flags to ensure only content and footer are refreshed
     first_display_done = 1;
     book_changed = 0;
-    header_drawn = 0;  // 仅标记header需要重绘，由display_txt_page_from_offset统一处理
+    header_drawn = 0;  // Mark only that header needs to be redrawn, handled by display_txt_page_from_offset
 
     // Use fast recovery: directly refresh current page
       if (g_frame_buffer && g_processed_text) {
-        // Paint_SelectImage(g_frame_buffer);  // 重新选择图像缓冲区
-        // // 确保清空整个屏幕缓冲区，包括Header区域
-        // Paint_Clear(WHITE);
-        
-        // 直接调用display_txt_page_from_offset，它会根据header_drawn=0重新绘制Header
+        // Directly call display_txt_page_from_offset, which will redraw Header based on header_drawn=0
         display_txt_page_from_offset(g_current_char_offset);
     }
-    
-    screen_off_recovering = 0;  // Recovery completed
-    
     // Clear accumulated events from eye control device
     struct input_event ev;
     if (eye_key_fd >= 0) {
@@ -775,7 +764,7 @@ void exit_screen_off_mode() {
     // Activate anti-flicker protection for 1.5 seconds
     struct timeval tv;
     gettimeofday(&tv, NULL);
-    anti_flicker_until = tv.tv_sec + 1; // Protection for 1 second (tv.tv_sec is unix timestamp)
+    anti_flicker_until = tv.tv_sec + 2; // Extend to 2-second safety delay period
 }
 
 // Function to safely truncate filename for display
@@ -817,7 +806,7 @@ void next_book() {
         snprintf(current_file, sizeof(current_file), "%s", book_list[current_book_index]);
         if (load_txt_file(current_file) == 0) {
             g_current_char_offset = 0;
-            g_current_char_offset = display_txt_page_from_offset(0);  // 更新当前偏移量
+            g_current_char_offset = display_txt_page_from_offset(0);  // Update current offset
             // Start of new book, clear history, push first page
             history_top = -1;
             if (history_top < MAX_HISTORY - 1) {
@@ -838,7 +827,7 @@ void prev_book() {
         snprintf(current_file, sizeof(current_file), "%s", book_list[current_book_index]);
         if (load_txt_file(current_file) == 0) {
             g_current_char_offset = 0;
-            g_current_char_offset = display_txt_page_from_offset(0);  // 更新当前偏移量
+            g_current_char_offset = display_txt_page_from_offset(0);  // Update current offset
             // Start of new book, clear history, push first page
             history_top = -1;
             if (history_top < MAX_HISTORY - 1) {
@@ -982,23 +971,13 @@ void handle_keys(void) {
     // Handle eye control device events
     if (num_fds > 2 && (fds[2].revents & POLLIN)) {
         if (read(eye_key_fd, &ev, sizeof(ev)) == sizeof(ev)) {
-            if (ev.type == EV_KEY && ev.value == 1) {
-                // Check if this is screen-off or wake signal
-                if (ev.code == CUSTOM_SCREEN_OFF_BTN) {
+            if (ev.type == EV_KEY) {
+                if (ev.code == CUSTOM_SCREEN_OFF_BTN && ev.value == 1) {
                     enter_screen_off_mode();
-                } else if (ev.code == CUSTOM_SCREEN_ON_BTN) {
+                } else if (ev.code == CUSTOM_SCREEN_ON_BTN && ev.value == 1) {
                     exit_screen_off_mode();
                 } else if (ev.code == KEY_PAGEDOWN) {
-                    if (g_current_char_offset < g_processed_text_size) {
-                        if (history_top < MAX_HISTORY - 1) {
-                            history_stack[++history_top] = g_current_char_offset;
-                        }
-                        size_t next_offset = display_txt_page_from_offset(g_current_char_offset);
-                        g_current_char_offset = next_offset;
-                        printf("Next page from eye control at offset %zu\n", g_current_char_offset);
-                    } else {
-                        printf("End of book.\n");
-                    }
+                    handle_key_event(1, &ev); 
                 }
             }
         }
@@ -1027,7 +1006,6 @@ void EPD_7in5_V2_reader_txt(void) {
     }
     DEV_GPIO_Init();
 #endif
-
     // Open physical key device
     key1_fd = open("/dev/input/event3", O_RDONLY);
     key2_fd = open("/dev/input/event1", O_RDONLY);
@@ -1107,9 +1085,9 @@ void EPD_7in5_V2_reader_txt(void) {
     }
     Paint_NewImage(g_frame_buffer, EPD_7IN5_V2_WIDTH, EPD_7IN5_V2_HEIGHT, ROTATE_180, WHITE);
 
-    // Display first page - 确保首次显示正确
+    // Display first page - Ensure first display is correct
     g_current_char_offset = 0;  // Ensure starting from the beginning of the text
-    g_current_char_offset = display_txt_page_from_offset(g_current_char_offset);  // 更新当前偏移量为下一页的起始位置
+    g_current_char_offset = display_txt_page_from_offset(g_current_char_offset);  // Update current offset to the start of next page
     // Push first page history (to allow backing to start)
     if (history_top < MAX_HISTORY - 1) {
         history_stack[++history_top] = 0;  // Store the starting offset of the first page

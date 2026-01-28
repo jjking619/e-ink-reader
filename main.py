@@ -7,57 +7,57 @@ from evdev import UInput, ecodes
 import mediapipe as mp
 
 # ======================
-# 参数区（工程关键）
+# Parameter section (critical for project)
 # ======================
 FRAME_WIDTH = 640
 FRAME_HEIGHT = 480
 
-# 虹膜位置变化阈值（相对变化）
+# Iris position change threshold (relative change)
 IRIS_CHANGE_THRESHOLD = 0.004
-# 虹膜位置显著变化的阈值
+# Threshold for significant iris position change
 
-# 翻页冷却时间
+# Page turn cooldown time
 COOLDOWN_TIME = 1.0
 
-# 平滑参数
-SMOOTHING_FACTOR = 0.3  # 指数平滑系数 (0-1，越小越平滑)
+# Smoothing parameter
+SMOOTHING_FACTOR = 0.3  # Exponential smoothing coefficient (0-1, smaller means smoother)
 
-# 初始化等待时间（防止启动时误触发）
-INITIALIZATION_PERIOD = 4.0  # 启动后等待4秒再开始响应翻页
+# Initialization waiting time (to prevent false triggering during startup)
+INITIALIZATION_PERIOD = 4.0  # Wait 4 seconds after startup before responding to page turns
 
-# 息屏相关参数
-SCREEN_OFF_TIMEOUT = 3.0  # 无脸检测到后多久发送息屏信号（秒）
-screen_off_sent_time = 0  # 发送息屏信号的时间
-screen_is_off = False  # 屏幕是否已息屏
+# Screen off related parameters
+SCREEN_OFF_TIMEOUT = 3.0  # How long to send screen off signal after no face detected (seconds)
+screen_off_sent_time = 0  # Time when screen off signal was sent
+screen_is_off = False  # Whether the screen is off
 
-# 状态变量
+# State variables
 last_action_time = 0
-read_to_bottom = False  # 标记是否已经阅读到屏幕底部
-smooth_iris_y = None    # 平滑后的虹膜Y位置
-reference_iris_y = None # 参考虹膜Y位置（静止时的位置）
-eye_movement_buffer = []  # 眼球运动方向缓冲区
-BUFFER_SIZE = 5          # 缓冲区大小
+read_to_bottom = False  # Flag to mark if already read to the bottom of the screen
+smooth_iris_y = None    # Smoothed iris Y position
+reference_iris_y = None # Reference iris Y position (when stationary)
+eye_movement_buffer = []  # Eye movement direction buffer
+BUFFER_SIZE = 5          # Buffer size
 
-# 添加一个变量来跟踪刚检测到人脸的情况
-face_just_detected_time = 0  # 刚检测到人脸的时间
-FACE_DETECTION_COOLDOWN = 2.0  # 人脸检测后的冷却时间
+# Add a variable to track when face was just detected
+face_just_detected_time = 0  # Time when face was just detected
+FACE_DETECTION_COOLDOWN = 2.0  # Cooldown time after face detection
 
-# 唤醒后安全延迟参数
-WAKE_UP_SAFETY_DELAY = 3.0  # 唤醒后3秒内不响应眼动翻页
-wake_up_time = 0  # 记录唤醒时间
+# Wake-up safety delay parameters
+WAKE_UP_SAFETY_DELAY = 3.0  # Do not respond to eye movement page turns for 3 seconds after wake-up
+wake_up_time = 0  # Record wake-up time
 
-# 初始化相关变量
+# Initialization related variables
 initialization_start_time = time.time()
-is_initialized = False  # 是否已完成初始化
+is_initialized = False  # Whether initialization is completed
 
 # ======================
-# 自动检测摄像头函数
+# Camera auto-detection function
 # ======================
 def find_available_camera():
-    """自动检测可用的摄像头设备"""
+    """Automatically detect available camera devices"""
     print("[INFO] Searching for available cameras...")
 
-    # 尝试索引0-9的摄像头
+    # Try camera indices 0-9
     for i in range(10):
         device_path = f"/dev/video{i}"
         if os.path.exists(device_path):
@@ -80,15 +80,15 @@ def find_available_camera():
     raise RuntimeError("No camera found")
 
 # ======================
-# 虚拟按键初始化
+# Virtual key initialization
 # ======================
-# 创建一个标准的键盘设备，模拟按键事件
+# Create a standard keyboard device to simulate key events
 ui = UInput({
     ecodes.EV_KEY: [
-        ecodes.KEY_PAGEDOWN,  # 下一页
-        ecodes.KEY_PAGEUP,   # 上一页
-        ecodes.BTN_LEFT,     # 息屏信号 (使用鼠标左键代替)
-        ecodes.BTN_RIGHT     # 唤醒信号 (使用鼠标右键代替)
+        ecodes.KEY_PAGEDOWN,  # Next page
+        ecodes.KEY_PAGEUP,   # Previous page
+        ecodes.BTN_LEFT,     # Screen off signal (using mouse left button as replacement)
+        ecodes.BTN_RIGHT     # Wake-up signal (using mouse right button as replacement)
     ]
 }, name="eye_page_turner", version=0x3)
 
@@ -98,7 +98,7 @@ def send_key(key):
     ui.syn()
 
 # ======================
-# MediaPipe 初始化
+# MediaPipe initialization
 # ======================
 mp_face = mp.solutions.face_mesh
 face_mesh = mp_face.FaceMesh(
@@ -109,16 +109,16 @@ face_mesh = mp_face.FaceMesh(
     min_tracking_confidence=0.5
 )
 
-# 虹膜关键点索引
+# Iris landmark indices
 LEFT_IRIS = [474, 475, 476, 477]
 RIGHT_IRIS = [469, 470, 471, 472]
 
-# 眼睛轮廓关键点（用于计算眼睛中心）
+# Eye contour landmarks (for calculating eye center)
 LEFT_EYE = [33, 133, 160, 159, 158, 144, 145, 153]
 RIGHT_EYE = [362, 263, 387, 386, 385, 373, 374, 380]
 
 # ======================
-# 摄像头初始化
+# Camera initialization
 # ======================
 CAMERA_INDEX = find_available_camera()
 cap = cv2.VideoCapture(CAMERA_INDEX)
@@ -131,21 +131,21 @@ if not cap.isOpened():
 print("[INFO] Eye control started")
 
 def eye_center(landmarks, idxs):
-    """计算眼睛中心点"""
+    """Calculate eye center point"""
     x_sum = sum(landmarks[i].x for i in idxs)
     y_sum = sum(landmarks[i].y for i in idxs)
     count = len(idxs)
     return x_sum/count, y_sum/count
 
 def iris_center(landmarks, idxs):
-    """计算虹膜中心点"""
+    """Calculate iris center point"""
     x_sum = sum(landmarks[i].x for i in idxs)
     y_sum = sum(landmarks[i].y for i in idxs)
     count = len(idxs)
     return x_sum/count, y_sum/count
 
 # ======================
-# 主循环
+# Main loop
 # ======================
 while True:
     ret, frame = cap.read()
@@ -158,150 +158,107 @@ while True:
 
     now = time.time()
 
-    # 检查是否完成初始化
+    # Check if initialization is completed
     if not is_initialized:
         if now - initialization_start_time >= INITIALIZATION_PERIOD:
             is_initialized = True
             print(f"[INFO] Initialization completed after {INITIALIZATION_PERIOD} seconds")
         else:
-            # 显示初始化倒计时
-            remaining_time = INITIALIZATION_PERIOD - (now - initialization_start_time)
-            # cv2.putText(frame, f"INITIALIZING... {remaining_time:.1f}s", (10, 30), 
-            #            cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 255), 2)
-            
-            # key = cv2.waitKey(1) & 0xFF
-            # if key == ord('q'):
-            #     break
-            # # 在统一的显示部分显示画面
-            # cv2.imshow("Eye Control - Iris Movement Detection", frame)
+            # Skip the following display steps
             continue
 
-    # 检测是否有人脸
+    # Detect if face is present
     face_detected = result.multi_face_landmarks is not None and len(result.multi_face_landmarks) > 0
     
     if not face_detected:
-        # 如果之前检测到了人脸但现在没有检测到，开始息屏计时
+        # If face was previously detected but now not detected, start screen off timer
         if not screen_off_sent_time:
             screen_off_sent_time = now
         
-        # 即使还未到息屏时间，也要显示提示信息
-        # if not screen_is_off:  # 如果尚未息屏，显示提示
-            # cv2.putText(frame, "No face detected", 
-            #            (int(FRAME_WIDTH/2)-100, 30), 
-            #            cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 165, 255), 2)
-            # cv2.putText(frame, f"Screen will sleep in: {max(0, int(SCREEN_OFF_TIMEOUT - (now - screen_off_sent_time)))}s", 
-            #            (int(FRAME_WIDTH/2)-150, 60), 
-            #            cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 165, 255), 1)
-        
-        # 检查是否超过了息屏时间阈值
+        # Check if exceeded screen off time threshold
         if now - screen_off_sent_time >= SCREEN_OFF_TIMEOUT and not screen_is_off:
             screen_is_off = True
             print("[INFO] Sending screen OFF signal due to no face detected")
-            send_key(ecodes.BTN_LEFT)  # 发送息屏信号，使用BTN_LEFT代替KEY_SLEEP
-            # 在息屏后仍然显示提示信息
-            # cv2.putText(frame, "Screen Off - No Face Detected", 
-            #            (int(FRAME_WIDTH/2)-200, int(FRAME_HEIGHT/2)-30), 
-            #            cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 0, 255), 2)
-            # cv2.putText(frame, "Look at camera to wake up", 
-            #            (int(FRAME_WIDTH/2)-160, int(FRAME_HEIGHT/2)+10), 
-            #            cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 0, 255), 2)
-        elif screen_is_off:  # 如果已经息屏了，也要显示提示
-            # cv2.putText(frame, "Screen Off - Waiting for face", 
-            #            (int(FRAME_WIDTH/2)-180, int(FRAME_HEIGHT/2)-30), 
-            #            cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 0, 255), 2)
-            # cv2.putText(frame, "Look at camera to wake up", 
-            #            (int(FRAME_WIDTH/2)-160, int(FRAME_HEIGHT/2)+10), 
-            #            cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 0, 255), 2)
-        
-        # 添加当前时间显示，便于调试
-        # current_time = time.strftime("%H:%M:%S")
-        # cv2.putText(frame, f"Time: {current_time}", (10, FRAME_HEIGHT - 20), 
-        #            cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 165, 255), 1)
-        
-        # 显示当前帧，确保画面正常刷新
-        # cv2.imshow("Eye Control - Iris Movement Detection", frame)
-        # cv2.waitKey(1)  # 强制刷新窗口
-            pass  # 跳过下面的显示步骤
-        
+            send_key(ecodes.BTN_LEFT)  # Send screen off signal, using BTN_LEFT instead of KEY_SLEEP
     else:
-        # 重新检测到人脸，重置息屏计时
+        # Reset screen off timer when face is re-detected
         screen_off_sent_time = 0
         
-        # 如果屏幕之前是息屏状态，现在需要发送唤醒信号
+        # If screen was previously off, now need to send wake-up signal
         if screen_is_off:
             screen_is_off = False
             print("[INFO] Sending screen ON signal - Face detected, attempting wake up")
-            send_key(ecodes.BTN_RIGHT)  # 发送唤醒信号，使用BTN_RIGHT代替KEY_WAKEUP
+            send_key(ecodes.BTN_RIGHT)  # Send wake-up signal, using BTN_RIGHT instead of KEY_WAKEUP
             
-            # 清空息屏期间累积的所有输入事件，防止意外翻页
+            # Clear all accumulated input events during screen-off period to prevent accidental page turns
             try:
-                # 尝试读取并丢弃所有待处理的事件
+                # Attempt to read and discard all pending events
                 import select
                 while select.select([ui.fd], [], [], 0) == ([ui.fd], [], []):
                     ui.read()
                 print("[INFO] Cleared accumulated events during screen-off period")
             except:
-                # 如果无法清空事件，忽略错误继续执行
+                # If unable to clear events, ignore error and continue execution
                 pass
                 
-            time.sleep(0.5)  # 短暂延迟，确保唤醒信号已被处理
+            time.sleep(0.5)  # Brief delay to ensure wake-up signal has been processed
             
-            # 记录唤醒时间，用于后续发送翻页命令和安全延迟
+            # Record wake-up time for subsequent page down command and safety delay
             wake_up_time = time.time()
-            # 记录刚检测到人脸的时间，用于启动新的冷却周期
+            # Record time when face was just detected, to start new cooldown period
             face_just_detected_time = now
             print(f"[INFO] Wake up detected, safety delay of {WAKE_UP_SAFETY_DELAY}s activated")
             print("[INFO] Will send page down in 2 seconds after wake up")
             
-        # 只有在屏幕未息屏时才处理眼动控制逻辑
+        # Only process eye movement control logic when screen is not off
         if not screen_is_off:
-            # 检查是否在人脸检测后冷却时间内，如果是则不处理眼动控制
+            # Check if within cooldown period after face detection, if yes, do not process eye movement control
             if now - face_just_detected_time <= FACE_DETECTION_COOLDOWN:
-                # 在人脸检测后的冷却时间内，不执行任何翻页操作
-                print(f"[INFO] In cooldown after face detection: {now - face_just_detected_time:.1f}s")
+                # During cooldown after face detection, do not execute any page turn operations
+                pass
             else:
-                # 检查是否需要在唤醒后发送翻页命令
+                # Check if need to send page down command after wake-up
                 if wake_up_time != 0 and time.time() - wake_up_time >= 2.0:
                     print("[ACTION] SENDING PAGE DOWN AFTER WAKE UP DELAY")
                     send_key(ecodes.KEY_PAGEDOWN)
-                    last_action_time = time.time()  # 更新最后操作时间
-                    wake_up_time = 0  # 重置唤醒时间标记
-                    # 跳过后续的眼动控制逻辑以避免重复翻页
+                    last_action_time = time.time()  # Update last action time
+                    wake_up_time = 0  # Reset wake-up time marker
+                    # Skip subsequent eye movement control logic to avoid duplicate page turns
                     continue
                 
                 lm = result.multi_face_landmarks[0].landmark
             
-            
-            # 获取双眼中心点
+
+            # Get eye center points
             left_eye_x, left_eye_y = eye_center(lm, LEFT_EYE)
             right_eye_x, right_eye_y = eye_center(lm, RIGHT_EYE)
             
-            # 获取虹膜中心点
+            # Get iris center points
             left_iris_x, left_iris_y = iris_center(lm, LEFT_IRIS)
             right_iris_x, right_iris_y = iris_center(lm, RIGHT_IRIS)
             
-            # 计算双眼虹膜的平均Y坐标（归一化值）
+            # Calculate average Y coordinate of both irises (normalized value)
             avg_iris_y = (left_iris_y + right_iris_y) / 2.0
             
-            # 应用指数平滑
+            # Apply exponential smoothing
             if smooth_iris_y is None:
                 smooth_iris_y = avg_iris_y
             else:
                 smooth_iris_y = smooth_iris_y * (1 - SMOOTHING_FACTOR) + avg_iris_y * SMOOTHING_FACTOR
             
-            # 初始化参考位置（当头部稳定时）
+            # Initialize reference position (when head is stable)
             if reference_iris_y is None:
                 reference_iris_y = smooth_iris_y
                 print(f"[INFO] Initial reference iris Y: {reference_iris_y:.4f}")
             
-            # 计算相对变化（相对于参考位置）
+            # Calculate relative change (compared to reference position)
             relative_change = smooth_iris_y - reference_iris_y
             
-            # 将变化方向添加到缓冲区
+            # Add movement direction to buffer
             if len(eye_movement_buffer) >= BUFFER_SIZE:
                 eye_movement_buffer.pop(0)
             
-            # 判断当前帧的运动方向
+            # Determine movement direction for current frame
             if relative_change > IRIS_CHANGE_THRESHOLD:
                 eye_movement_buffer.append("DOWN")
             elif relative_change < -IRIS_CHANGE_THRESHOLD:
@@ -309,89 +266,34 @@ while True:
             else:
                 eye_movement_buffer.append("NEUTRAL")
             
-            # 分析缓冲区中的运动模式
+            # Analyze movement pattern in buffer
             down_count = eye_movement_buffer.count("DOWN")
             up_count = eye_movement_buffer.count("UP")
             
-            # 检测向下看模式（连续多帧向下看）
-            if down_count >= BUFFER_SIZE * 0.7:  # 70%的帧都是向下看
+            # Detect downward gaze pattern (consecutive frames looking down)
+            if down_count >= BUFFER_SIZE * 0.7:  # 70% of frames are looking down
                 read_to_bottom = True
-                reference_iris_y = smooth_iris_y  # 更新参考位置
-                # cv2.putText(frame, "READING DOWN", (10, 60), 
-                #            cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 255), 2)
+                reference_iris_y = smooth_iris_y  # Update reference position
             
-            # 检测向上看模式（连续多帧向上看）
+            # Detect upward gaze pattern (consecutive frames looking up)
             elif up_count >= BUFFER_SIZE * 0.7 and read_to_bottom:
-                # 检查是否在唤醒后的安全延迟期内
+                # Check if within wake-up safety delay period
                 if wake_up_time != 0 and now - wake_up_time < WAKE_UP_SAFETY_DELAY:
-                    # 在安全延迟期内，不响应眼动翻页
-                    safety_remaining = WAKE_UP_SAFETY_DELAY - (now - wake_up_time)
-                    print(f"[INFO] In wake-up safety period, waiting {safety_remaining:.1f}s")
+                    # During safety delay period, do not respond to eye movement page turns
+                    pass
                 elif now - last_action_time >= COOLDOWN_TIME:
                     print("[ACTION] NEXT PAGE (Look Up)")
                     send_key(ecodes.KEY_PAGEDOWN)
                     last_action_time = now
-                    read_to_bottom = False  # 重置状态
-                    reference_iris_y = smooth_iris_y  # 更新参考位置
-                    eye_movement_buffer.clear()  # 清空缓冲区
+                    read_to_bottom = False  # Reset state
+                    reference_iris_y = smooth_iris_y  # Update reference position
+                    eye_movement_buffer.clear()  # Clear buffer
                 else:
-                    # 显示冷却状态
-                    remaining_time = COOLDOWN_TIME - (now - last_action_time)
-                    # cv2.putText(frame, f"Cooldown: {remaining_time:.1f}s", (10, 150), 
-                    #            cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 255), 2)
+                    pass
             
-            # 如果眼睛回到中性位置且没有阅读到底部，更新参考位置
+            # If eyes return to neutral position and not read to bottom, update reference position
             elif up_count >= BUFFER_SIZE * 0.7 and not read_to_bottom:
                 reference_iris_y = smooth_iris_y
-            
-            # 显示当前状态
-            if read_to_bottom:
-                status = "READ TO BOTTOM - LOOK UP TO TURN PAGE"
-                # status_color = (0, 255, 255)
-            else:
-                status = "READING"
-                # status_color = (255, 255, 255)
-            
-            # cv2.putText(frame, f"Status: {status}", (10, 30), 
-            #           cv2.FONT_HERSHEY_SIMPLEX, 0.7, status_color, 2)
-            
-            # 只在调试模式下显示虹膜位置信息，减少绘制操作
-            # cv2.putText(frame, f"Smooth Iris Y: {smooth_iris_y:.4f}", (10, 90), 
-            #            cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 255), 2)
-            # cv2.putText(frame, f"Relative Change: {relative_change:.4f}", (10, 120), 
-            #            cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 255), 2)
-            
-            # 显示阈值
-            # cv2.putText(frame, f"Threshold: +/-{IRIS_CHANGE_THRESHOLD:.4f}", (10, 180), 
-            #            cv2.FONT_HERSHEY_SIMPLEX, 0.5, (100, 100, 255), 1)
-            
-            # 显示缓冲区状态
-            # buffer_str = "Buffer: " + " ".join(eye_movement_buffer)
-            # cv2.putText(frame, buffer_str, (10, 210), 
-            #            cv2.FONT_HERSHEY_SIMPLEX, 0.5, (200, 200, 200), 1)
-        
-        # else:
-            # 屏幕息屏状态下，仍然显示摄像头画面而不是黑屏，只更新提示文字
-            # cv2.putText(frame, "Screen Off - Waiting for face detection", 
-            #            (int(FRAME_WIDTH/2)-200, int(FRAME_HEIGHT/2)-30), 
-            #            cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 0, 255), 2)
-            # cv2.putText(frame, "Look at camera to wake up", 
-            #            (int(FRAME_WIDTH/2)-160, int(FRAME_HEIGHT/2)+10), 
-            #            cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 0, 255), 2)
-            
-            # 添加当前时间显示，便于调试
-            # current_time = time.strftime("%H:%M:%S")
-            # cv2.putText(frame, f"Time: {current_time}", (10, FRAME_HEIGHT - 20), 
-            #            cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 165, 255), 1)
-            
-            # cv2.imshow("Eye Control - Iris Movement Detection", frame)
-            # cv2.waitKey(1)  # 强制刷新窗口
-            # continue # 替换之前的continue，因为上面的if分支已经有continue了
-    
-    # 统一显示部分
-    # cv2.imshow("Eye Control - Iris Movement Detection", frame)
-    # 已移除键盘输入处理逻辑（不再响应 'q' 退出或 'r' 重置）
-    # cv2.waitKey(1)
 
 cap.release()
 ui.close()
